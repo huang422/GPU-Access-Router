@@ -42,6 +42,7 @@ all = [
 
 [project.scripts]
 gpu-directer = "gpu_directer.cli:main"
+ollama = "gpu_directer.shim.ollama_shim:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
