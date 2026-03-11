@@ -22,15 +22,12 @@ class InferenceRequest:
     queue_position: int = 0
     result: Optional[Dict] = None
     error: Optional[str] = None
+    done_event: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 def _now_ts() -> float:
     import time
     return time.time()
-
-
-def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class SerialQueue:
@@ -40,16 +37,14 @@ class SerialQueue:
         self,
         timeout_seconds: int = DEFAULT_TIMEOUT,
         max_depth: int = DEFAULT_QUEUE_DEPTH,
-        ollama_callable: Optional[Callable] = None,
     ):
         self.timeout_seconds = timeout_seconds
         self.max_depth = max_depth  # 0 = unlimited
-        self._ollama_callable: Optional[Callable] = ollama_callable
+        self._ollama_callable: Optional[Callable] = None
         self._unload_callable: Optional[Callable] = None
         self._current_model: Optional[str] = None
 
         self._queue: asyncio.Queue = asyncio.Queue()
-        self._lock: asyncio.Lock = asyncio.Lock()
         self._pending: Dict[str, InferenceRequest] = {}
         self._task: Optional[asyncio.Task] = None
         self._started_at: float = _now_ts()
@@ -58,15 +53,14 @@ class SerialQueue:
         self._ollama_callable = callable_
 
     def set_unload_callable(self, callable_: Callable) -> None:
-        """Set a callable(model: str) that unloads a model from GPU memory."""
         self._unload_callable = callable_
 
     def start(self) -> None:
-        """Start the background processing loop (call from asyncio context)."""
+        """Start the background processing loop (call from async context)."""
         self._task = asyncio.create_task(self._process_loop())
 
-    async def enqueue(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Add a request to the queue; returns {request_id, queue_position, status}."""
+    async def enqueue(self, request_data: Dict[str, Any]) -> "InferenceRequest":
+        """Add a request to the queue and return the InferenceRequest object."""
         req = InferenceRequest(
             request_id=str(uuid.uuid4()),
             model=request_data["model"],
@@ -74,126 +68,109 @@ class SerialQueue:
             options=request_data.get("options", {}),
             timeout_seconds=request_data.get("timeout", self.timeout_seconds),
         )
-        position = self._queue.qsize() + 1
-        req.queue_position = position
+        req.queue_position = self._queue.qsize() + 1
         self._pending[req.request_id] = req
         await self._queue.put(req)
-        return {
-            "request_id": req.request_id,
-            "queue_position": position,
-            "status": "waiting",
-        }
+        return req
+
+    async def get_depth(self) -> int:
+        """Return number of active (waiting + processing) requests."""
+        return sum(
+            1 for r in self._pending.values()
+            if r.status in ("waiting", "processing")
+        )
+
+    def get_uptime(self) -> float:
+        return _now_ts() - self._started_at
 
     async def get_status(self, request_id: str) -> Optional[Dict[str, Any]]:
-        """Return current status dict for a request_id, or None if not found."""
+        """Return a status snapshot for the given request_id."""
         req = self._pending.get(request_id)
         if req is None:
             return None
-        result: Dict[str, Any] = {
+        out: Dict[str, Any] = {
             "request_id": req.request_id,
             "status": req.status,
             "queue_position": req.queue_position,
             "queued_at": _fmt_ts(req.queued_at),
         }
         if req.started_at is not None:
-            result["started_at"] = _fmt_ts(req.started_at)
+            out["started_at"] = _fmt_ts(req.started_at)
         if req.status == "complete" and req.result is not None:
-            result["result"] = req.result
+            out["result"] = req.result
         if req.status in ("timeout", "error") and req.error:
-            result["error"] = req.error
-            if req.status == "timeout":
-                result["timeout_seconds"] = req.timeout_seconds
-        return result
+            out["error"] = req.error
+        return out
 
-    async def get_depth(self) -> int:
-        """Return number of active (waiting + processing) requests."""
-        return sum(
-            1 for req in self._pending.values()
-            if req.status in ("waiting", "processing")
-        )
-
-    def get_uptime(self) -> float:
-        return _now_ts() - self._started_at
+    # ------------------------------------------------------------------
+    # Background worker
+    # ------------------------------------------------------------------
 
     async def _process_loop(self) -> None:
-        """Background task: pull from queue and run inference serially."""
+        """Pull requests from queue and run inference one at a time."""
         while True:
             req: InferenceRequest = await self._queue.get()
             if req.request_id not in self._pending:
                 self._queue.task_done()
                 continue
-            async with self._lock:
-                import time
-                req.started_at = time.time()
-                req.status = "processing"
-                req.queue_position = 0
-                # Update positions of remaining waiting requests
-                self._recalculate_positions()
 
-                try:
-                    if self._ollama_callable is None:
-                        raise RuntimeError("No Ollama callable configured.")
+            import time
+            req.started_at = time.time()
+            req.status = "processing"
+            req.queue_position = 0
+            self._recalculate_positions()
 
-                    # If switching models, unload the previous one to free GPU memory
-                    if (
-                        self._unload_callable is not None
-                        and self._current_model is not None
-                        and self._current_model != req.model
-                    ):
-                        try:
-                            await self._call_unload(self._current_model)
-                        except Exception:
-                            pass  # best-effort; proceed even if unload fails
+            try:
+                if self._ollama_callable is None:
+                    raise RuntimeError("No Ollama callable configured.")
 
-                    result = await asyncio.wait_for(
-                        self._call_ollama(req),
-                        timeout=req.timeout_seconds,
-                    )
-                    self._current_model = req.model
-                    req.result = result
-                    req.status = "complete"
-                except asyncio.TimeoutError:
-                    req.status = "timeout"
-                    req.error = f"Request {req.request_id} exceeded queue timeout of {req.timeout_seconds}s"
-                except Exception as exc:
-                    req.status = "error"
-                    req.error = str(exc)
-                finally:
-                    self._queue.task_done()
-                    # Schedule cleanup of finished request after 5 minutes
-                    asyncio.create_task(self._cleanup_after(req.request_id, delay=300))
+                # Unload previous model from GPU if switching models
+                if (
+                    self._unload_callable is not None
+                    and self._current_model is not None
+                    and self._current_model != req.model
+                ):
+                    try:
+                        await self._run_in_thread(self._unload_callable, self._current_model)
+                    except Exception:
+                        pass  # best-effort
 
-    async def _call_ollama(self, req: InferenceRequest) -> Dict:
-        """Run the Ollama callable without blocking the event loop."""
-        import inspect
-        if inspect.iscoroutinefunction(self._ollama_callable):
-            return await self._ollama_callable(req.model, req.messages, req.options)
-        # Sync callable — run in thread pool so polling endpoints stay responsive
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None, self._ollama_callable, req.model, req.messages, req.options
-        )
+                result = await asyncio.wait_for(
+                    self._run_in_thread(
+                        self._ollama_callable, req.model, req.messages, req.options
+                    ),
+                    timeout=req.timeout_seconds,
+                )
+                self._current_model = req.model
+                req.result = result
+                req.status = "complete"
 
-    async def _call_unload(self, model: str) -> None:
-        """Run the unload callable without blocking the event loop."""
-        import inspect
-        if inspect.iscoroutinefunction(self._unload_callable):
-            await self._unload_callable(model)
-        else:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._unload_callable, model)
+            except asyncio.TimeoutError:
+                req.status = "timeout"
+                req.error = f"Inference timed out after {req.timeout_seconds}s"
+            except Exception as exc:
+                req.status = "error"
+                req.error = str(exc)
+            finally:
+                req.done_event.set()          # wake up any waiters
+                self._queue.task_done()
+                asyncio.create_task(self._cleanup_after(req.request_id, delay=300))
+
+    @staticmethod
+    async def _run_in_thread(fn: Callable, *args) -> Any:
+        """Run a sync callable in a thread pool so the event loop stays free."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, fn, *args)
 
     async def _cleanup_after(self, request_id: str, delay: int) -> None:
-        """Remove a finished request from _pending after a delay."""
         await asyncio.sleep(delay)
         self._pending.pop(request_id, None)
 
     def _recalculate_positions(self) -> None:
-        """Update queue_position for all waiting requests."""
         pos = 1
-        for req in self._pending.values():
-            if req.status == "waiting":
-                req.queue_position = pos
+        for r in self._pending.values():
+            if r.status == "waiting":
+                r.queue_position = pos
                 pos += 1
 
 

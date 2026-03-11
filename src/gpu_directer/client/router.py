@@ -66,7 +66,6 @@ class GPURouter:
         Returns an ollama.ChatResponse (identical to ollama.Client.chat()).
         """
         from gpu_directer.client.routing import resolve_route
-        from gpu_directer.client.poller import poll_for_result
 
         effective_timeout = timeout or self.timeout
 
@@ -78,8 +77,8 @@ class GPURouter:
             return self._chat_local(model, messages, **kwargs)
 
     def _chat_remote(self, model, messages, timeout, **kwargs):
-        """POST to /gd/chat then poll for result."""
-        from gpu_directer.client.poller import poll_for_result
+        """POST to /gd/chat and wait for the result (server blocks until inference completes)."""
+        from gpu_directer.client.poller import _reconstruct_chat_response
 
         if not self.server_ip:
             raise GPUDirecterConnectionError("No server_ip configured.")
@@ -98,8 +97,10 @@ class GPURouter:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        # Socket timeout must exceed inference timeout so we receive the server's response
+        http_timeout = timeout + 30
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=http_timeout) as resp:
                 result = json.loads(resp.read())
         except urllib.error.HTTPError as exc:
             body = ""
@@ -109,20 +110,22 @@ class GPURouter:
                 pass
             if exc.code == 503:
                 raise GPUDirecterConnectionError(
-                    f"Server queue unavailable (503). "
-                    f"Queue may be full or server is still starting up. "
-                    f"Run 'gpu-directer server restart' to clear the queue. Detail: {body}"
+                    f"Server queue full or unavailable. "
+                    f"Run 'gpu-directer server restart' on the server. Detail: {body}"
+                ) from exc
+            if exc.code == 408:
+                raise GPUDirecterConnectionError(
+                    f"Inference timed out on server after {timeout}s."
                 ) from exc
             raise GPUDirecterConnectionError(
-                f"Failed to submit request to {base_url}/gd/chat: HTTP {exc.code} {body}"
+                f"Server returned HTTP {exc.code}: {body}"
             ) from exc
         except Exception as exc:
             raise GPUDirecterConnectionError(
-                f"Failed to submit request to {base_url}/gd/chat: {exc}"
+                f"Failed to connect to {base_url}/gd/chat: {exc}"
             ) from exc
 
-        request_id = result["request_id"]
-        return poll_for_result(base_url, request_id, timeout)
+        return _reconstruct_chat_response(result)
 
     def _chat_local(self, model, messages, **kwargs):
         """Call local Ollama directly."""

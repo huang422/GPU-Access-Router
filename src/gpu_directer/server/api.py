@@ -1,5 +1,6 @@
 """FastAPI server exposing /gd/* endpoints with serial queue."""
 
+import asyncio
 import json
 import time
 import urllib.error
@@ -29,12 +30,11 @@ from gpu_directer.server.queue import SerialQueue
 app = FastAPI(title="GPU Directer Server", version="0.1.0")
 
 _serial_queue: Optional[SerialQueue] = None
-_start_time: float = time.time()
 _ollama_port: int = DEFAULT_PORT
 
 
 # ---------------------------------------------------------------------------
-# Request / Response models
+# Request model
 # ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
@@ -59,7 +59,6 @@ async def startup_event():
 
     _serial_queue = SerialQueue(timeout_seconds=queue_timeout, max_depth=max_depth)
 
-    # Wire Ollama callable
     ollama_client = _ollama.Client(host=f"http://localhost:{_ollama_port}")
 
     def _ollama_call(model, messages, options):
@@ -67,19 +66,17 @@ async def startup_event():
             model=model,
             messages=messages,
             options=options or {},
-            keep_alive=0,  # unload from GPU memory immediately after response
+            keep_alive=0,  # release GPU memory immediately after response
         )
-        # Convert to dict for storage
         if hasattr(resp, "__dict__"):
             return _chat_response_to_dict(resp)
         return resp
 
     def _unload_model(model: str) -> None:
-        """Unload a model from GPU memory by setting keep_alive=0."""
         try:
             ollama_client.generate(model=model, prompt="", keep_alive=0)
         except Exception:
-            pass  # best-effort
+            pass
 
     _serial_queue.set_ollama_callable(_ollama_call)
     _serial_queue.set_unload_callable(_unload_model)
@@ -87,7 +84,6 @@ async def startup_event():
 
 
 def _chat_response_to_dict(resp) -> Dict:
-    """Convert ollama.ChatResponse to a plain dict for JSON storage."""
     msg = resp.message
     return {
         "model": getattr(resp, "model", ""),
@@ -106,103 +102,89 @@ def _chat_response_to_dict(resp) -> Dict:
 
 @app.get("/gd/health")
 async def health():
-    global _serial_queue, _ollama_port
     queue_depth = await _serial_queue.get_depth() if _serial_queue else 0
     processing = any(
-        req.status == "processing"
-        for req in (_serial_queue._pending.values() if _serial_queue else [])
+        r.status == "processing"
+        for r in (_serial_queue._pending.values() if _serial_queue else [])
     )
     ollama_ok = _check_ollama_reachable(_ollama_port)
-    gpu_ok = _check_gpu_available()
     uptime = _serial_queue.get_uptime() if _serial_queue else 0.0
     return {
         "status": "ok" if ollama_ok else "degraded",
         "queue_depth": queue_depth,
         "processing": processing,
         "ollama_reachable": ollama_ok,
-        "gpu_available": gpu_ok,
         "uptime_seconds": int(uptime),
     }
 
 
-@app.post("/gd/chat", status_code=202)
+@app.post("/gd/chat")
 async def submit_chat(req: ChatRequest):
-    global _serial_queue
+    """Submit inference request. Blocks until complete, returns result directly."""
     if _serial_queue is None:
         raise HTTPException(status_code=503, detail="Queue not initialized.")
 
-    # Check queue full
     depth = await _serial_queue.get_depth()
     max_depth = _serial_queue.max_depth
     if max_depth > 0 and depth >= max_depth:
-        return JSONResponse(
+        raise HTTPException(
             status_code=503,
-            content={"error": "Queue full", "max_depth": max_depth, "current_depth": depth},
+            detail=f"Queue full ({depth}/{max_depth}). Try again later or run 'gpu-directer server restart'.",
         )
 
-    result = await _serial_queue.enqueue({
+    inference_req = await _serial_queue.enqueue({
         "model": req.model,
         "messages": req.messages,
         "options": req.options,
         "timeout": req.timeout,
     })
-    return result
+
+    # Wait for inference to complete (event loop stays free for other requests)
+    try:
+        await asyncio.wait_for(inference_req.done_event.wait(), timeout=req.timeout + 10)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail=f"Request timed out after {req.timeout}s")
+
+    if inference_req.status == "error":
+        raise HTTPException(status_code=500, detail=inference_req.error or "Inference error")
+    if inference_req.status == "timeout":
+        raise HTTPException(status_code=408, detail=inference_req.error or "Inference timed out")
+
+    return inference_req.result
 
 
 @app.get("/gd/queue/{request_id}")
 async def get_queue_status(request_id: str):
-    global _serial_queue
     if _serial_queue is None:
         raise HTTPException(status_code=503, detail="Queue not initialized.")
     status = await _serial_queue.get_status(request_id)
     if status is None:
-        return JSONResponse(
-            status_code=404,
-            content={"error": "Request not found", "request_id": request_id},
-        )
+        raise HTTPException(status_code=404, detail=f"Request {request_id} not found")
     return status
 
 
 @app.get("/gd/queue")
 async def get_queue():
-    global _serial_queue
     if _serial_queue is None:
         return {"depth": 0, "max_depth": 0, "processing": False, "requests": []}
     depth = await _serial_queue.get_depth()
-    processing = any(
-        req.status == "processing"
-        for req in _serial_queue._pending.values()
-    )
+    processing = any(r.status == "processing" for r in _serial_queue._pending.values())
     requests = [
-        {
-            "request_id": req.request_id,
-            "position": req.queue_position,
-            "model": req.model,
-            "queued_at": _fmt_ts(req.queued_at),
-        }
-        for req in _serial_queue._pending.values()
-        if req.status == "waiting"
+        {"request_id": r.request_id, "position": r.queue_position, "model": r.model}
+        for r in _serial_queue._pending.values()
+        if r.status == "waiting"
     ]
-    return {
-        "depth": depth,
-        "max_depth": _serial_queue.max_depth,
-        "processing": processing,
-        "requests": requests,
-    }
+    return {"depth": depth, "max_depth": _serial_queue.max_depth, "processing": processing, "requests": requests}
 
 
 @app.get("/gd/models")
 async def list_models():
-    global _ollama_port
     url = f"http://localhost:{_ollama_port}/api/tags"
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
             data = json.loads(resp.read())
     except Exception as exc:
-        return JSONResponse(
-            status_code=503,
-            content={"error": f"Ollama unreachable: {exc}", "models": []},
-        )
+        raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
     return {"models": data.get("models", [])}
 
 
@@ -218,28 +200,5 @@ def _check_ollama_reachable(port: int) -> bool:
         return False
 
 
-def _check_gpu_available() -> bool:
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["docker", "exec", "ollama", "nvidia-smi"],
-            capture_output=True, timeout=5
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-def _fmt_ts(ts: float) -> str:
-    from datetime import datetime, timezone
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def run_server(host: str = "0.0.0.0", port: int = DEFAULT_API_PORT, reload: bool = False):
-    """Start the FastAPI server via uvicorn."""
-    uvicorn.run(
-        "gpu_directer.server.api:app",
-        host=host,
-        port=port,
-        reload=reload,
-    )
+    uvicorn.run("gpu_directer.server.api:app", host=host, port=port, reload=reload)
