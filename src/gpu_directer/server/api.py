@@ -63,7 +63,12 @@ async def startup_event():
     ollama_client = _ollama.Client(host=f"http://localhost:{_ollama_port}")
 
     def _ollama_call(model, messages, options):
-        resp = ollama_client.chat(model=model, messages=messages, options=options or {})
+        resp = ollama_client.chat(
+            model=model,
+            messages=messages,
+            options=options or {},
+            keep_alive=0,  # unload from GPU memory immediately after response
+        )
         # Convert to dict for storage
         if hasattr(resp, "__dict__"):
             return _chat_response_to_dict(resp)

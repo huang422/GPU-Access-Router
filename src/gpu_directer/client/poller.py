@@ -26,7 +26,7 @@ def poll_for_result(
 
     while time.time() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=5) as resp:
+            with urllib.request.urlopen(url, timeout=30) as resp:
                 data = json.loads(resp.read())
         except Exception as exc:
             raise RuntimeError(f"Failed to poll queue status: {exc}") from exc
