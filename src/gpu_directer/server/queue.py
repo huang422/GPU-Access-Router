@@ -106,8 +106,11 @@ class SerialQueue:
         return result
 
     async def get_depth(self) -> int:
-        """Return total number of waiting + processing requests."""
-        return len(self._pending)
+        """Return number of active (waiting + processing) requests."""
+        return sum(
+            1 for req in self._pending.values()
+            if req.status in ("waiting", "processing")
+        )
 
     def get_uptime(self) -> float:
         return _now_ts() - self._started_at
@@ -157,6 +160,8 @@ class SerialQueue:
                     req.error = str(exc)
                 finally:
                     self._queue.task_done()
+                    # Schedule cleanup of finished request after 5 minutes
+                    asyncio.create_task(self._cleanup_after(req.request_id, delay=300))
 
     async def _call_ollama(self, req: InferenceRequest) -> Dict:
         """Run the Ollama callable without blocking the event loop."""
@@ -177,6 +182,11 @@ class SerialQueue:
         else:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self._unload_callable, model)
+
+    async def _cleanup_after(self, request_id: str, delay: int) -> None:
+        """Remove a finished request from _pending after a delay."""
+        await asyncio.sleep(delay)
+        self._pending.pop(request_id, None)
 
     def _recalculate_positions(self) -> None:
         """Update queue_position for all waiting requests."""
