@@ -4,6 +4,6 @@ router = GPURouter()
 
 response = router.chat(
     model="qwen3.5:9b",
-    messages=[{"role": "user", "content": "Explain what a GPU is in one sentence."}]
+    messages=[{"role": "user", "content": "用繁體中文解說機器學習"}]
 )
 print(response.message.content)

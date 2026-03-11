@@ -24,12 +24,23 @@ def poll_for_result(
     deadline = time.time() + timeout
     url = f"{base_url}/gd/queue/{request_id}"
 
+    consecutive_errors = 0
+    max_consecutive_errors = 5
+
     while time.time() < deadline:
         try:
             with urllib.request.urlopen(url, timeout=30) as resp:
                 data = json.loads(resp.read())
-        except Exception as exc:
-            raise RuntimeError(f"Failed to poll queue status: {exc}") from exc
+            consecutive_errors = 0  # reset on success
+        except Exception:
+            # Server temporarily unresponsive (e.g. busy with inference) — keep retrying
+            consecutive_errors += 1
+            if consecutive_errors >= max_consecutive_errors:
+                raise GPUDirecterTimeoutError(
+                    f"Server at {url} did not respond after {max_consecutive_errors} consecutive attempts."
+                )
+            time.sleep(poll_interval)
+            continue
 
         status = data.get("status", "")
 
