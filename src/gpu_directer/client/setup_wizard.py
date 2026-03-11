@@ -5,7 +5,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from gpu_directer.core.constants import DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -23,7 +23,7 @@ def _fail(msg: str, hint: str = ""):
 
 def run_client_setup(
     server_ip: Optional[str] = None,
-    port: int = DEFAULT_PORT,
+    port: int = DEFAULT_API_PORT,
     non_interactive: bool = False,
     config_path: Optional[str] = None,
 ) -> None:

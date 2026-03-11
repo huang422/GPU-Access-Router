@@ -7,6 +7,8 @@ import urllib.error
 import urllib.request
 from typing import Dict, List, Optional
 
+from gpu_directer.core.constants import DEFAULT_PORT
+
 
 def check_tailscale_installed() -> bool:
     try:
@@ -77,7 +79,7 @@ def query_server_health(ip: str, port: int) -> Optional[Dict]:
 def query_local_models() -> Optional[List[str]]:
     """Return list of local Ollama model names, or None if unavailable."""
     try:
-        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=3) as resp:
+        with urllib.request.urlopen(f"http://localhost:{DEFAULT_PORT}/api/tags", timeout=3) as resp:
             data = json.loads(resp.read())
         return [m["name"] for m in data.get("models", [])]
     except Exception:

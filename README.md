@@ -17,7 +17,7 @@ Route LLM inference calls to a remote GPU server or fall back to local Ollama au
  │  Server         │        │  (fallback)          │
  │  (Tailscale)    │        │  localhost:11434      │
  │                 │        └─────────────────────┘
- │  FastAPI +      │
+ │  FastAPI :8080  │
  │  Serial Queue   │
  │  + Ollama GPU   │
  └─────────────────┘
@@ -27,14 +27,21 @@ Route LLM inference calls to a remote GPU server or fall back to local Ollama au
 
 | Role | Machine | Purpose |
 |---|---|---|
-| **gpu-server** | Ubuntu + NVIDIA GPU | Runs Ollama in Docker, exposes queue API over Tailscale |
-| **gpu-client** | macOS or Ubuntu (no GPU needed) | Connects to server, routes `GPURouter.chat()` calls |
+| **gpu-server** | Ubuntu + NVIDIA GPU | Runs Ollama (native or Docker), exposes queue API on port 8080 over Tailscale |
+| **gpu-client** | macOS or Ubuntu (no GPU needed) | Connects to server port 8080, routes `GPURouter.chat()` calls |
+
+## Port Architecture
+
+| Port | Service | Where |
+|---|---|---|
+| `11434` | Ollama | Server only (internal, not exposed to clients) |
+| `8080` | GPU Directer FastAPI server | Server → exposed to clients via Tailscale |
 
 ## Requirements
 
 | Machine | Requirements |
 |---|---|
-| GPU Server | Ubuntu 20.04+, NVIDIA GPU + drivers, Docker |
+| GPU Server | Ubuntu 20.04+, NVIDIA GPU + drivers, Python 3.8+, Ollama (native or Docker) |
 | Client | macOS 12+ or Ubuntu 20.04+, Python 3.8+ |
 
 ---
@@ -77,27 +84,61 @@ Tailscale creates a secure private network between your machines.
 
 ## Part 2: GPU Server Setup
 
+### Install
+
 ```bash
-# Install (on the GPU server)
 pip install "gpu-directer[server] @ git+https://github.com/huang422/GPU-Directer.git"
-pip install --force-reinstall "gpu-directer[server] @ git+https://github.com/huang422/GPU-Directer.git"
+```
 
+### Ollama
 
-# Run the interactive setup wizard
+GPU Directer connects to Ollama on `localhost:11434`. If Ollama is already running (native install), no Docker setup is needed.
+
+```bash
+# If Ollama is not installed yet:
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull a model
+ollama pull llama3.2
+
+# Verify Ollama is up
+curl http://localhost:11434/api/tags
+```
+
+### Run the setup wizard
+
+```bash
 gpu-directer server setup
 ```
 
 The wizard:
 - Checks Docker and NVIDIA drivers
-- Pulls and starts `ollama/ollama` Docker container with `--gpus all`
+- **Detects if Ollama is already running** — skips Docker setup if so
+- If Ollama is not running, pulls and starts `ollama/ollama` Docker container with `--gpus all`
 - Installs Tailscale if needed and prompts you to authenticate
 - Prints your Tailscale IP and writes `~/.gpu-directer/config.toml`
 
-```bash
-# Pull a model
-docker exec ollama ollama pull llama3.2
+### Start the GPU Directer API server
 
-# Verify everything is healthy
+After setup, start the FastAPI queue server (this is what clients connect to):
+
+```bash
+# Start in foreground
+gpu-directer server serve
+
+# Or specify host/port explicitly
+gpu-directer server serve --host 0.0.0.0 --port 8080
+```
+
+To keep it running in the background, use `nohup` or a systemd service:
+
+```bash
+nohup gpu-directer server serve > ~/gpu-directer.log 2>&1 &
+```
+
+### Verify everything is healthy
+
+```bash
 gpu-directer server doctor
 ```
 
@@ -113,6 +154,8 @@ Expected output:
 Overall: PASS
 ```
 
+> **Note**: "Ollama container running" check uses Docker. If you run Ollama natively, this check will show fail but "Queue status" and "Models available" will still pass.
+
 ---
 
 ## Part 3: Client Setup
@@ -122,8 +165,8 @@ Overall: PASS
 pip install "gpu-directer[client] @ git+https://github.com/huang422/GPU-Directer.git"
 
 # Run the interactive setup wizard
-gpu-directer client setup
-# → Enter the GPU server's Tailscale IP when prompted
+# Use --port 8080 (GPU Directer API port, not Ollama's 11434)
+gpu-directer client setup --server-ip 100.64.0.5 --port 8080
 
 # Verify the connection
 gpu-directer client status
@@ -132,7 +175,7 @@ gpu-directer client status
 Expected output:
 ```
 GPU Directer Client Status
-  Server IP:      100.64.0.5:11434
+  Server IP:      100.64.0.5:8080
   Server status:  ● online
   Queue depth:    0 requests waiting
   Routing mode:   auto
@@ -194,13 +237,14 @@ Config is stored at `~/.gpu-directer/config.toml`:
 ```toml
 [client]
 server_ip       = "100.64.0.5"   # Tailscale IP of the GPU server
-server_port     = 11434           # Ollama port (default: 11434)
+server_port     = 8080            # GPU Directer API port (default: 8080)
 routing_mode    = "auto"          # "auto" | "remote" | "local"
 timeout_seconds = 300             # Queue wait timeout in seconds
 default_model   = ""              # Optional: pre-select a model
 
 [server]
-ollama_port     = 11434           # Port Ollama container listens on
+ollama_port     = 11434           # Port Ollama listens on (internal only)
+api_port        = 8080            # Port GPU Directer FastAPI server listens on
 queue_timeout   = 300             # Max seconds a request waits in queue
 max_queue_depth = 10              # Max requests in queue (0 = unlimited)
 
@@ -221,6 +265,7 @@ gpu-directer config set client.routing_mode=local
 gpu-directer config set client.server_ip=100.64.0.99
 gpu-directer config set client.timeout_seconds=600
 gpu-directer config set server.queue_timeout=120
+gpu-directer config set server.api_port=8080
 
 # Open in $EDITOR
 gpu-directer config edit
@@ -237,9 +282,10 @@ gpu-directer config reset
 
 | Command | Description |
 |---|---|
-| `gpu-directer server setup [--non-interactive] [--port PORT]` | Interactive setup wizard |
+| `gpu-directer server setup [--non-interactive] [--port PORT] [--api-port PORT]` | Interactive setup wizard |
+| `gpu-directer server serve [--host HOST] [--port PORT] [--reload]` | Start the FastAPI queue server |
 | `gpu-directer server doctor [--json]` | 6-point health check |
-| `gpu-directer server models [--json]` | List models on this server |
+| `gpu-directer server models [--json]` | List models on this server (requires `server serve` running) |
 | `gpu-directer server start` | Start Ollama Docker container |
 | `gpu-directer server stop` | Stop Ollama Docker container |
 | `gpu-directer server restart` | Restart Ollama Docker container |
@@ -272,21 +318,95 @@ gpu-directer config reset
 
 ---
 
+## Part 7: Developer Workflow
+
+### Initial setup (dev machine, editable install)
+
+```bash
+git clone https://github.com/huang422/GPU-Directer.git
+cd GPU-Directer
+pip install -e ".[all]"          # installs both server + client extras
+gpu-directer --version           # verify install
+```
+
+### Update after code changes
+
+**Dev machine** (editable install — Python changes take effect immediately, no reinstall needed):
+```bash
+git pull                         # pull latest changes
+# No reinstall needed for .py changes
+# Only reinstall if pyproject.toml dependencies changed:
+pip install -e ".[all]"
+```
+
+**GPU server** (re-install from GitHub after pushing):
+```bash
+# First push your changes from dev machine:
+git add -A && git commit -m "your message" && git push
+
+# Then on the GPU server:
+pip install --force-reinstall "gpu-directer[server] @ git+https://github.com/huang422/GPU-Directer.git"
+
+# Restart the API server after update:
+pkill -f "gpu-directer server serve"
+gpu-directer server serve &
+```
+
+Alternatively, clone on the server for faster iteration:
+```bash
+# On GPU server (one-time setup):
+git clone https://github.com/huang422/GPU-Directer.git
+cd GPU-Directer
+pip install -e ".[server]"
+
+# Update:
+git pull                         # changes take effect immediately
+pkill -f "gpu-directer server serve"
+gpu-directer server serve &
+```
+
+### Verify the full stack locally
+
+```bash
+# 1. Check imports
+python -c "from gpu_directer import GPURouter; print('OK')"
+
+# 2. Check config
+gpu-directer config show
+
+# 3. Check client can reach server
+gpu-directer client status
+
+# 4. Run linter
+cd src && ruff check .
+```
+
+---
+
 ## Troubleshooting
 
 ### Server unreachable from client
 
 ```bash
-tailscale status              # Check Tailscale is running on both machines
-gpu-directer server doctor    # Run on server — check all 6 items
-gpu-directer client status    # Run on client — shows connectivity
+tailscale status                  # Check Tailscale is running on both machines
+gpu-directer server doctor        # Run on server — check all 6 items
+gpu-directer client status        # Run on client — shows connectivity
+
+# Make sure the API server is running on the GPU server:
+gpu-directer server serve         # Should be running in background
+curl http://<tailscale-ip>:8080/gd/health
 ```
 
 ### GPU not detected by Ollama
 
 ```bash
-# On server:
-docker exec ollama nvidia-smi   # Should list your GPU
+# Native Ollama:
+nvidia-smi                        # Should show GPU
+# If model runs slowly, check GPU is being used:
+ollama run llama3.2 --verbose
+
+# Docker Ollama:
+docker exec ollama nvidia-smi    # Should list your GPU
 # If this fails:
 sudo apt install -y nvidia-container-toolkit
 sudo systemctl restart docker
@@ -296,7 +416,7 @@ gpu-directer server restart
 ### Queue full or requests timing out
 
 ```bash
-gpu-directer client status    # Shows current queue depth
+gpu-directer client status        # Shows current queue depth
 # Increase timeout:
 gpu-directer config set client.timeout_seconds=600
 gpu-directer config set server.queue_timeout=600
@@ -310,5 +430,9 @@ UserWarning: Model 'llama3.2' not found on remote server, routing to local Ollam
 
 Pull the model on the server:
 ```bash
+# Native Ollama:
+ollama pull llama3.2
+
+# Docker Ollama:
 docker exec ollama ollama pull llama3.2
 ```

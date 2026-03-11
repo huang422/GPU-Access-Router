@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from gpu_directer.core.constants import DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
 from gpu_directer.core.exceptions import GPUDirecterConfigError, GPUDirecterConnectionError
 
 
@@ -44,7 +44,7 @@ class GPURouter:
         self.routing_mode: str = routing_mode or client_cfg.get("routing_mode", DEFAULT_ROUTING_MODE)
         self.timeout: int = timeout or int(client_cfg.get("timeout_seconds", DEFAULT_TIMEOUT))
         self.server_ip: Optional[str] = client_cfg.get("server_ip") or None
-        self.server_port: int = int(client_cfg.get("server_port", DEFAULT_PORT))
+        self.server_port: int = int(client_cfg.get("server_port", DEFAULT_API_PORT))
 
         self._remote_client = None
         self._local_client = None
@@ -60,7 +60,7 @@ class GPURouter:
     def _get_local_client(self):
         if self._local_client is None:
             import ollama
-            self._local_client = ollama.Client(host="http://localhost:11434")
+            self._local_client = ollama.Client(host=f"http://localhost:{DEFAULT_PORT}")
         return self._local_client
 
     def chat(

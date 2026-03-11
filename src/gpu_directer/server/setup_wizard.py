@@ -10,7 +10,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from gpu_directer.core.constants import DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -32,6 +32,7 @@ def _fail(msg: str, hint: str = ""):
 
 def run_server_setup(
     port: int = DEFAULT_PORT,
+    api_port: int = DEFAULT_API_PORT,
     non_interactive: bool = False,
     config_path: Optional[str] = None,
 ) -> None:
@@ -148,6 +149,7 @@ def run_server_setup(
     cfg = cfg_mod.load_config(config_path)
     cfg.setdefault("server", {})
     cfg["server"]["ollama_port"] = port
+    cfg["server"]["api_port"] = api_port
     cfg["server"]["queue_timeout"] = DEFAULT_TIMEOUT
     cfg["server"]["max_queue_depth"] = DEFAULT_QUEUE_DEPTH
     cfg.setdefault("meta", {})["role"] = "server"
@@ -159,9 +161,10 @@ def run_server_setup(
         console.print(f"\n[bold]Your Tailscale IP:[/bold] [cyan]{tailscale_ip}[/cyan]")
         console.print("Share this IP with your clients so they can connect.")
     console.print("\nNext steps:")
-    console.print("  1. Pull a model: [bold]docker exec ollama ollama pull llama3.2[/bold]")
-    console.print("  2. Verify setup: [bold]gpu-directer server doctor[/bold]")
-    console.print(f"  3. On each client: [bold]gpu-directer client setup --server-ip {tailscale_ip or '<IP>'}[/bold]")
+    console.print("  1. Pull a model: [bold]ollama pull llama3.2[/bold]")
+    console.print(f"  2. Start the API server: [bold]gpu-directer server serve --port {api_port}[/bold]")
+    console.print("  3. Verify setup: [bold]gpu-directer server doctor[/bold]")
+    console.print(f"  4. On each client: [bold]gpu-directer client setup --server-ip {tailscale_ip or '<IP>'} --port {api_port}[/bold]")
 
 
 def _wait_for_ollama(port: int, timeout: int = 60) -> bool:

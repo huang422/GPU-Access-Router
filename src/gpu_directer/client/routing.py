@@ -3,6 +3,7 @@
 import warnings
 from typing import Any, Dict, Optional
 
+from gpu_directer.core.constants import DEFAULT_API_PORT
 from gpu_directer.core.exceptions import GPUDirecterConnectionError
 
 
@@ -23,7 +24,7 @@ def resolve_route(
 
     client_cfg = config.get("client", {})
     server_ip = client_cfg.get("server_ip", "")
-    server_port = int(client_cfg.get("server_port", 11434))
+    server_port = int(client_cfg.get("server_port", DEFAULT_API_PORT))
     routing_mode = prefer or client_cfg.get("routing_mode", "auto")
 
     # Explicit remote-only

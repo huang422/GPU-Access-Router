@@ -14,6 +14,7 @@ import tomli_w
 
 from gpu_directer.core.constants import (
     CONFIG_PATH,
+    DEFAULT_API_PORT,
     DEFAULT_PORT,
     DEFAULT_QUEUE_DEPTH,
     DEFAULT_ROUTING_MODE,
@@ -33,6 +34,7 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "server": {
         "ollama_port": DEFAULT_PORT,
+        "api_port": DEFAULT_API_PORT,
         "queue_timeout": DEFAULT_TIMEOUT,
         "max_queue_depth": DEFAULT_QUEUE_DEPTH,
     },
@@ -159,7 +161,7 @@ def validate_config(data: Dict[str, Any]) -> None:
         if val is not None and not (1 <= val <= 65535):
             raise GPUDirecterConfigError(f"client.{field} must be in range 1–65535.")
 
-    for field in ("ollama_port",):
+    for field in ("ollama_port", "api_port"):
         val = server.get(field)
         if val is not None and not (1 <= val <= 65535):
             raise GPUDirecterConfigError(f"server.{field} must be in range 1–65535.")

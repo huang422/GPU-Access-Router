@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Optional
 
-from gpu_directer.core.constants import DEFAULT_PORT
+from gpu_directer.core.constants import DEFAULT_API_PORT
 
 
 def get_client_status(config_path: Optional[str] = None) -> Dict[str, Any]:
@@ -18,7 +18,7 @@ def get_client_status(config_path: Optional[str] = None) -> Dict[str, Any]:
     cfg = cfg_mod.load_config(config_path)
     client_cfg = cfg.get("client", {})
     server_ip = client_cfg.get("server_ip", "")
-    server_port = client_cfg.get("server_port", DEFAULT_PORT)
+    server_port = client_cfg.get("server_port", DEFAULT_API_PORT)
     routing_mode = client_cfg.get("routing_mode", "auto")
 
     # Remote status

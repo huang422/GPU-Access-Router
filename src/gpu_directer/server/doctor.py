@@ -7,7 +7,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from gpu_directer.core.constants import DEFAULT_PORT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
 
 
 def _check(name: str, status: str, detail: str, fix_hint: str = "") -> Dict[str, str]:
@@ -143,10 +143,10 @@ def check_ollama_models(port: int = DEFAULT_PORT) -> Dict[str, str]:
         )
 
 
-def check_queue_status(port: int = DEFAULT_PORT) -> Dict[str, str]:
+def check_queue_status(api_port: int = DEFAULT_API_PORT) -> Dict[str, str]:
     try:
         with urllib.request.urlopen(
-            f"http://localhost:{port}/gd/health", timeout=5
+            f"http://localhost:{api_port}/gd/health", timeout=5
         ) as resp:
             data = json.loads(resp.read())
         depth = data.get("queue_depth", 0)
@@ -164,15 +164,15 @@ def check_queue_status(port: int = DEFAULT_PORT) -> Dict[str, str]:
         )
 
 
-def run_doctor(port: int = DEFAULT_PORT) -> Dict[str, Any]:
+def run_doctor(ollama_port: int = DEFAULT_PORT, api_port: int = DEFAULT_API_PORT) -> Dict[str, Any]:
     """Run all 6 diagnostic checks and return DiagnosticReport dict."""
     checks: List[Dict] = [
         check_docker(),
         check_ollama_container(),
         check_gpu_passthrough(),
         check_tailscale(),
-        check_ollama_models(port),
-        check_queue_status(port),
+        check_ollama_models(ollama_port),
+        check_queue_status(api_port),
     ]
     overall = "pass" if all(c["status"] == "pass" for c in checks) else "fail"
     return {

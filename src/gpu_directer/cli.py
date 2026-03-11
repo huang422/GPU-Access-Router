@@ -10,7 +10,7 @@ from rich.console import Console
 
 import gpu_directer
 from gpu_directer import __version__
-from gpu_directer.core.constants import DEFAULT_PORT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -79,13 +79,14 @@ def _require_server_deps():
 
 @server.command("setup")
 @click.option("--non-interactive", is_flag=True, default=False)
-@click.option("--port", default=DEFAULT_PORT, type=int, show_default=True)
+@click.option("--port", default=DEFAULT_PORT, type=int, show_default=True, help="Ollama port.")
+@click.option("--api-port", default=DEFAULT_API_PORT, type=int, show_default=True, help="GPU Directer API port.")
 @click.pass_context
-def server_setup(ctx, non_interactive, port):
+def server_setup(ctx, non_interactive, port, api_port):
     """Interactive wizard to configure the GPU server from scratch."""
     _require_server_deps()
     from gpu_directer.server.setup_wizard import run_server_setup
-    run_server_setup(port=port, non_interactive=non_interactive, config_path=ctx.obj.config_path)
+    run_server_setup(port=port, api_port=api_port, non_interactive=non_interactive, config_path=ctx.obj.config_path)
 
 
 @server.command("doctor")
@@ -95,7 +96,11 @@ def server_doctor(ctx, json_flag):
     """Extended diagnostic check of all server components."""
     _require_server_deps()
     from gpu_directer.server.doctor import run_doctor
-    report = run_doctor()
+    from gpu_directer import config as cfg_mod
+    _cfg = cfg_mod.load_config(ctx.obj.config_path)
+    _ollama_port = _cfg.get("server", {}).get("ollama_port", DEFAULT_PORT)
+    _api_port = _cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
+    report = run_doctor(ollama_port=_ollama_port, api_port=_api_port)
     obj: _Ctx = ctx.obj
     if obj.json_output or json_flag:
         click.echo(json.dumps(report, indent=2))
@@ -132,7 +137,7 @@ def server_models(ctx, json_flag):
     obj: _Ctx = ctx.obj
     from gpu_directer import config as cfg_mod
     config = cfg_mod.load_config(obj.config_path)
-    port = config.get("server", {}).get("ollama_port", DEFAULT_PORT)
+    port = config.get("server", {}).get("api_port", DEFAULT_API_PORT)
     url = f"http://localhost:{port}/gd/models"
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
@@ -170,6 +175,18 @@ def server_stop():
 def server_restart():
     """Restart the Ollama Docker container."""
     _run_docker_lifecycle("restart")
+
+
+@server.command("serve")
+@click.option("--host", default="0.0.0.0", show_default=True)
+@click.option("--port", default=DEFAULT_API_PORT, type=int, show_default=True)
+@click.option("--reload", is_flag=True, default=False, help="Auto-reload on code changes (dev only).")
+def server_serve(host, port, reload):
+    """Start the GPU Directer FastAPI server (queue + /gd/* endpoints)."""
+    _require_server_deps()
+    from gpu_directer.server.api import run_server
+    console.print(f"[bold]Starting GPU Directer API server on {host}:{port}…[/bold]")
+    run_server(host=host, port=port, reload=reload)
 
 
 def _run_docker_lifecycle(action: str):
@@ -213,7 +230,7 @@ def _require_client_deps():
 
 @client.command("setup")
 @click.option("--server-ip", default=None)
-@click.option("--port", default=DEFAULT_PORT, type=int, show_default=True)
+@click.option("--port", default=DEFAULT_API_PORT, type=int, show_default=True)
 @click.option("--non-interactive", is_flag=True, default=False)
 @click.pass_context
 def client_setup(ctx, server_ip, port, non_interactive):
