@@ -79,7 +79,9 @@ Tailscale creates a secure private network between your machines.
 
 ```bash
 # Install (on the GPU server)
-pip install "git+https://github.com/huang422/GPU-Directer.git[server]"
+pip install "gpu-directer[server] @ git+https://github.com/huang422/GPU-Directer.git"
+pip install --force-reinstall "gpu-directer[server] @ git+https://github.com/huang422/GPU-Directer.git"
+
 
 # Run the interactive setup wizard
 gpu-directer server setup
@@ -117,7 +119,7 @@ Overall: PASS
 
 ```bash
 # Install (on your laptop / cloud machine)
-pip install "git+https://github.com/your-account/GPU-Directer.git[client]"
+pip install "gpu-directer[client] @ git+https://github.com/huang422/GPU-Directer.git"
 
 # Run the interactive setup wizard
 gpu-directer client setup

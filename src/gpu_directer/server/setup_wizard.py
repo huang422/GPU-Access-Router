@@ -61,38 +61,52 @@ def run_server_setup(
     else:
         _ok("NVIDIA GPU detected.")
 
-    # Step 3: Pull ollama/ollama Docker image
-    _step(3, total, "Pulling ollama/ollama Docker image (this may take a while)…")
-    result = subprocess.run(["docker", "pull", "ollama/ollama"], timeout=300)
-    if result.returncode != 0:
-        _fail("Failed to pull ollama/ollama image.", "Check your internet connection and Docker daemon.")
-        sys.exit(2)
-    _ok("ollama/ollama image pulled.")
+    # Step 3 & 4: Check if Ollama is already reachable — skip Docker setup if so
+    _step(3, total, "Checking if Ollama is already running…")
+    if _wait_for_ollama(port, timeout=5):
+        _ok(f"Ollama already responding on port {port}, skipping Docker setup.")
+        _step(4, total, "Skipping container setup (Ollama already running).")
+        _ok("Nothing to do.")
+    else:
+        # Step 3: Pull ollama/ollama Docker image (skip if already present)
+        console.print("  Ollama not detected, setting up via Docker…")
+        image_check = subprocess.run(
+            ["docker", "image", "inspect", "ollama/ollama"],
+            capture_output=True,
+        )
+        if image_check.returncode == 0:
+            _ok("ollama/ollama image already present, skipping pull.")
+        else:
+            console.print("  Image not found locally, pulling (this may take a while)…")
+            result = subprocess.run(["docker", "pull", "ollama/ollama"], timeout=300)
+            if result.returncode != 0:
+                _fail("Failed to pull ollama/ollama image.", "Check your internet connection and Docker daemon.")
+                sys.exit(2)
+            _ok("ollama/ollama image pulled.")
 
-    # Step 4: Start Ollama container
-    _step(4, total, "Starting Ollama container with GPU access…")
-    # Remove existing container if present
-    subprocess.run(["docker", "rm", "-f", "ollama"], capture_output=True)
-    run_cmd = [
-        "docker", "run", "-d",
-        "--gpus", "all",
-        "--name", "ollama",
-        "-e", f"OLLAMA_HOST=0.0.0.0:{port}",
-        "-v", "ollama:/root/.ollama",
-        "-p", f"{port}:{port}",
-        "--restart", "unless-stopped",
-        "ollama/ollama",
-    ]
-    result = subprocess.run(run_cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        _fail(f"Failed to start container: {result.stderr.strip()}", "Check Docker and GPU drivers.")
-        sys.exit(2)
-    _ok("Ollama container started.")
+        # Step 4: Start Ollama container
+        _step(4, total, "Starting Ollama container with GPU access…")
+        subprocess.run(["docker", "rm", "-f", "ollama"], capture_output=True)
+        run_cmd = [
+            "docker", "run", "-d",
+            "--gpus", "all",
+            "--name", "ollama",
+            "-e", f"OLLAMA_HOST=0.0.0.0:{port}",
+            "-v", "ollama:/root/.ollama",
+            "-p", f"{port}:{port}",
+            "--restart", "unless-stopped",
+            "ollama/ollama",
+        ]
+        result = subprocess.run(run_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            _fail(f"Failed to start container: {result.stderr.strip()}", "Check Docker and GPU drivers.")
+            sys.exit(2)
+        _ok("Ollama container started.")
 
-    # Step 5: Wait for Ollama ready
+    # Step 5: Confirm Ollama is ready
     _step(5, total, "Waiting for Ollama to be ready (up to 60s)…")
     if not _wait_for_ollama(port, timeout=60):
-        _fail("Ollama did not become ready in time.", "Check: docker logs ollama")
+        _fail("Ollama did not become ready in time.", "Check: docker logs ollama  OR  journalctl -u ollama")
         sys.exit(2)
     _ok("Ollama is ready.")
 
