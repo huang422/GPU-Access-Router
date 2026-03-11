@@ -56,7 +56,10 @@ def resolve_route(
     # Step 2 & 3: If remote reachable, check model availability
     if remote_reachable:
         remote_models = query_server_models(server_ip, server_port)
-        if remote_models is not None and model in remote_models:
+
+        # If model list is unavailable (query failed), route to remote optimistically —
+        # the server will return an error if the model doesn't exist.
+        if remote_models is None or model in remote_models:
             return "remote"
 
         # Step 4: Model not on remote — check local
@@ -70,14 +73,16 @@ def resolve_route(
             )
             return "local"
 
-        # Model not anywhere
+        # Model confirmed not on remote — show what IS available
+        available = ", ".join(remote_models) if remote_models else "none"
         if local_models is None:
             raise GPUDirecterConnectionError(
-                f"Model '{model}' not found on remote server and local Ollama is unreachable."
+                f"Model '{model}' not found on remote server and local Ollama is unreachable. "
+                f"Remote has: [{available}]"
             )
         raise GPUDirecterConnectionError(
             f"Model '{model}' not found on remote server or local Ollama. "
-            f"Pull it: ollama pull {model}"
+            f"Remote has: [{available}]"
         )
 
     # Remote unreachable — fall back to local silently
