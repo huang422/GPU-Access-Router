@@ -1,4 +1,4 @@
-from gpu_directer import GPURouter
+from gpu_access_router import GPURouter
 
 router = GPURouter()
 

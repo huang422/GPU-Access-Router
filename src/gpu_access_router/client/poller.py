@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict
 
-from gpu_directer.core.exceptions import GPUDirecterTimeoutError
+from gpu_access_router.core.exceptions import GPUAccessRouterTimeoutError
 
 
 def poll_for_result(
@@ -18,7 +18,7 @@ def poll_for_result(
     """Poll GET {base_url}/gd/queue/{request_id} until complete.
 
     Returns Ollama-format ChatResponse dict on 'complete'.
-    Raises GPUDirecterTimeoutError on 'timeout' status.
+    Raises GPUAccessRouterTimeoutError on 'timeout' status.
     Raises RuntimeError on 'error' status.
     """
     deadline = time.time() + timeout
@@ -36,7 +36,7 @@ def poll_for_result(
             # Server temporarily unresponsive (e.g. busy with inference) — keep retrying
             consecutive_errors += 1
             if consecutive_errors >= max_consecutive_errors:
-                raise GPUDirecterTimeoutError(
+                raise GPUAccessRouterTimeoutError(
                     f"Server at {url} did not respond after {max_consecutive_errors} consecutive attempts."
                 )
             time.sleep(poll_interval)
@@ -49,7 +49,7 @@ def poll_for_result(
             return _reconstruct_chat_response(result)
 
         if status == "timeout":
-            raise GPUDirecterTimeoutError(
+            raise GPUAccessRouterTimeoutError(
                 f"Request {request_id} exceeded queue timeout of {timeout}s"
             )
 
@@ -61,7 +61,7 @@ def poll_for_result(
         # Still waiting or processing — keep polling
         time.sleep(poll_interval)
 
-    raise GPUDirecterTimeoutError(
+    raise GPUAccessRouterTimeoutError(
         f"Request {request_id} exceeded client-side timeout of {timeout}s"
     )
 

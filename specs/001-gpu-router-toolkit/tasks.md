@@ -1,8 +1,8 @@
 ---
-description: "Task list for GPU Directer Toolkit implementation"
+description: "Task list for GPU Access Router Toolkit implementation"
 ---
 
-# Tasks: GPU Directer Toolkit
+# Tasks: GPU Access Router Toolkit
 
 **Input**: Design documents from `/specs/001-gpu-router-toolkit/`
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓
@@ -13,7 +13,7 @@ description: "Task list for GPU Directer Toolkit implementation"
 
 - **[P]**: Can run in parallel (different files, no blocking dependencies)
 - **[Story]**: User story label (US1–US6) maps to spec.md priorities
-- Paths assume src-layout: `src/gpu_directer/`, `tests/` at repo root
+- Paths assume src-layout: `src/gpu_access_router/`, `tests/` at repo root
 
 ---
 
@@ -21,12 +21,12 @@ description: "Task list for GPU Directer Toolkit implementation"
 
 **Purpose**: Project structure, packaging config, and shared core modules. No role-specific dependencies.
 
-- [X] T001 Create directory tree: `src/gpu_directer/{core,server,client}/`, `tests/{unit,integration}/` with `__init__.py` stubs
-- [X] T002 Create `pyproject.toml` with metadata, `requires-python = ">=3.8"`, core deps (`click>=8.0`, `tomli>=2.0; python_version<"3.11"`, `tomli-w>=1.0`, `rich>=13.0`), optional extras `[server]` (`fastapi>=0.100`, `uvicorn[standard]>=0.23`, `ollama>=0.1`), `[client]` (`ollama>=0.1`), `[all]` (`gpu-directer[server,client]`), console script `gpu-directer = "gpu_directer.cli:main"`, and setuptools src-layout config
-- [X] T003 [P] Create `src/gpu_directer/core/constants.py` defining `DEFAULT_PORT = 11434`, `DEFAULT_TIMEOUT = 300`, `DEFAULT_QUEUE_DEPTH = 10`, `DEFAULT_ROUTING_MODE = "auto"`, `CONFIG_PATH = Path.home() / ".gpu-directer" / "config.toml"`
-- [X] T004 [P] Create `src/gpu_directer/core/exceptions.py` defining `GPUDirecterError` (base), `GPUDirecterConfigError`, `GPUDirecterConnectionError`, `GPUDirecterTimeoutError` — all inheriting from `GPUDirecterError`
-- [X] T005 Create `src/gpu_directer/__init__.py` with placeholder exports: `from gpu_directer.core.exceptions import *` and `__version__ = "0.1.0"`
-- [X] T006 Create `src/gpu_directer/__main__.py` with `from gpu_directer.cli import main; main()` for `python -m gpu_directer` support
+- [X] T001 Create directory tree: `src/gpu_access_router/{core,server,client}/`, `tests/{unit,integration}/` with `__init__.py` stubs
+- [X] T002 Create `pyproject.toml` with metadata, `requires-python = ">=3.8"`, core deps (`click>=8.0`, `tomli>=2.0; python_version<"3.11"`, `tomli-w>=1.0`, `rich>=13.0`), optional extras `[server]` (`fastapi>=0.100`, `uvicorn[standard]>=0.23`, `ollama>=0.1`), `[client]` (`ollama>=0.1`), `[all]` (`gpu-access-router[server,client]`), console script `gpu-access-router = "gpu_access_router.cli:main"`, and setuptools src-layout config
+- [X] T003 [P] Create `src/gpu_access_router/core/constants.py` defining `DEFAULT_PORT = 11434`, `DEFAULT_TIMEOUT = 300`, `DEFAULT_QUEUE_DEPTH = 10`, `DEFAULT_ROUTING_MODE = "auto"`, `CONFIG_PATH = Path.home() / ".gpu-access-router" / "config.toml"`
+- [X] T004 [P] Create `src/gpu_access_router/core/exceptions.py` defining `GPUAccessRouterError` (base), `GPUAccessRouterConfigError`, `GPUAccessRouterConnectionError`, `GPUAccessRouterTimeoutError` — all inheriting from `GPUAccessRouterError`
+- [X] T005 Create `src/gpu_access_router/__init__.py` with placeholder exports: `from gpu_access_router.core.exceptions import *` and `__version__ = "0.1.0"`
+- [X] T006 Create `src/gpu_access_router/__main__.py` with `from gpu_access_router.cli import main; main()` for `python -m gpu_access_router` support
 
 **Checkpoint**: `pip install -e .` succeeds; package importable; no CLI yet
 
@@ -34,79 +34,79 @@ description: "Task list for GPU Directer Toolkit implementation"
 
 ## Phase 2: Foundation (Config + CLI Skeleton)
 
-**Purpose**: Config TOML read/write and the full CLI command tree registered. Every command must exist (even if stubbed), so `gpu-directer --help` shows all sub-commands.
+**Purpose**: Config TOML read/write and the full CLI command tree registered. Every command must exist (even if stubbed), so `gpu-access-router --help` shows all sub-commands.
 
 **⚠️ CRITICAL**: No user story implementation can begin until config.py and cli.py skeleton are complete
 
-- [X] T007 Implement `src/gpu_directer/config.py`: `load_config(path=None) → dict` (reads TOML, creates default if missing), `save_config(data, path=None)` (writes TOML), `get(key, default=None)` (dotted key access e.g. `"client.server_ip"`), `set_value(key, value)` (dotted key write with type validation), `validate_config(data)` raising `GPUDirecterConfigError` on invalid `routing_mode`, negative timeouts, or invalid port range. Default config structure matches data-model.md TOML schema.
-- [X] T008 [P] Create `src/gpu_directer/server/__init__.py` with lazy import guard: `try: import fastapi; HAVE_SERVER = True except ImportError: HAVE_SERVER = False`
-- [X] T009 [P] Create `src/gpu_directer/client/__init__.py` with lazy import guard: `try: import ollama; HAVE_CLIENT = True except ImportError: HAVE_CLIENT = False`
-- [X] T010 Implement full CLI skeleton in `src/gpu_directer/cli.py` using Click: top-level `@click.group main` with `--version` flag; `server` group with stubbed `setup`, `doctor`, `models`, `start`, `stop`, `restart` commands; `client` group with stubbed `setup`, `status`, `models` commands; `config` group with stubbed `show`, `set`, `edit`, `reset` commands. Each stub prints "Not yet implemented" and exits 0. Global `--config PATH` option on `main` group. Each command accepts `--json` and `--quiet` flags.
+- [X] T007 Implement `src/gpu_access_router/config.py`: `load_config(path=None) → dict` (reads TOML, creates default if missing), `save_config(data, path=None)` (writes TOML), `get(key, default=None)` (dotted key access e.g. `"client.server_ip"`), `set_value(key, value)` (dotted key write with type validation), `validate_config(data)` raising `GPUAccessRouterConfigError` on invalid `routing_mode`, negative timeouts, or invalid port range. Default config structure matches data-model.md TOML schema.
+- [X] T008 [P] Create `src/gpu_access_router/server/__init__.py` with lazy import guard: `try: import fastapi; HAVE_SERVER = True except ImportError: HAVE_SERVER = False`
+- [X] T009 [P] Create `src/gpu_access_router/client/__init__.py` with lazy import guard: `try: import ollama; HAVE_CLIENT = True except ImportError: HAVE_CLIENT = False`
+- [X] T010 Implement full CLI skeleton in `src/gpu_access_router/cli.py` using Click: top-level `@click.group main` with `--version` flag; `server` group with stubbed `setup`, `doctor`, `models`, `start`, `stop`, `restart` commands; `client` group with stubbed `setup`, `status`, `models` commands; `config` group with stubbed `show`, `set`, `edit`, `reset` commands. Each stub prints "Not yet implemented" and exits 0. Global `--config PATH` option on `main` group. Each command accepts `--json` and `--quiet` flags.
 
-**Checkpoint**: `pip install -e .` + `gpu-directer --help` shows all command groups; `gpu-directer server --help` lists all server sub-commands; config.py unit-testable in isolation
+**Checkpoint**: `pip install -e .` + `gpu-access-router --help` shows all command groups; `gpu-access-router server --help` lists all server sub-commands; config.py unit-testable in isolation
 
 ---
 
 ## Phase 3: US1 — Server Setup: Install and Configure GPU Server (Priority: P1) 🎯 MVP
 
-**Goal**: A user on an Ubuntu+NVIDIA machine runs `gpu-directer server setup` and ends with a running Ollama Docker container with GPU access, Tailscale connected, and the server printing its Tailscale IP. `gpu-directer server doctor` reports all checks pass.
+**Goal**: A user on an Ubuntu+NVIDIA machine runs `gpu-access-router server setup` and ends with a running Ollama Docker container with GPU access, Tailscale connected, and the server printing its Tailscale IP. `gpu-access-router server doctor` reports all checks pass.
 
-**Independent Test**: On a single Ubuntu+NVIDIA machine: run `gpu-directer server setup`, then `gpu-directer server doctor` — all 6 checks pass; `curl http://localhost:11434/api/tags` returns HTTP 200.
+**Independent Test**: On a single Ubuntu+NVIDIA machine: run `gpu-access-router server setup`, then `gpu-access-router server doctor` — all 6 checks pass; `curl http://localhost:11434/api/tags` returns HTTP 200.
 
 ### Server Queue + API (prerequisite for server to accept requests)
 
-- [X] T011 Implement `src/gpu_directer/server/queue.py`: `SerialQueue` class with `__init__(timeout_seconds=300, max_depth=10)`, `async enqueue(request_data: dict) → dict` (returns `{request_id, queue_position, status}`), `async get_status(request_id: str) → dict` (returns position/status/result), `async get_depth() → int`, background asyncio task `_process_loop()` that pulls from `asyncio.Queue`, acquires `asyncio.Lock`, calls Ollama via injected callable, uses `asyncio.wait_for(coro, timeout=self.timeout_seconds)` for per-request timeout. `InferenceRequest` dataclass with fields from data-model.md.
-- [X] T012 [P] [US1] Implement `src/gpu_directer/server/api.py`: FastAPI app with `POST /gd/chat` (enqueues request, returns 202 with `{request_id, queue_position, status}`), `GET /gd/queue/{request_id}` (polls status/result), `GET /gd/health` (returns `{status, queue_depth, processing, ollama_reachable, gpu_available, uptime_seconds}`), `GET /gd/models` (proxies Ollama `/api/tags`). Startup event initializes `SerialQueue` from config. Import guards raise HTTP 503 if Ollama unreachable on startup.
+- [X] T011 Implement `src/gpu_access_router/server/queue.py`: `SerialQueue` class with `__init__(timeout_seconds=300, max_depth=10)`, `async enqueue(request_data: dict) → dict` (returns `{request_id, queue_position, status}`), `async get_status(request_id: str) → dict` (returns position/status/result), `async get_depth() → int`, background asyncio task `_process_loop()` that pulls from `asyncio.Queue`, acquires `asyncio.Lock`, calls Ollama via injected callable, uses `asyncio.wait_for(coro, timeout=self.timeout_seconds)` for per-request timeout. `InferenceRequest` dataclass with fields from data-model.md.
+- [X] T012 [P] [US1] Implement `src/gpu_access_router/server/api.py`: FastAPI app with `POST /gd/chat` (enqueues request, returns 202 with `{request_id, queue_position, status}`), `GET /gd/queue/{request_id}` (polls status/result), `GET /gd/health` (returns `{status, queue_depth, processing, ollama_reachable, gpu_available, uptime_seconds}`), `GET /gd/models` (proxies Ollama `/api/tags`). Startup event initializes `SerialQueue` from config. Import guards raise HTTP 503 if Ollama unreachable on startup.
 
 ### Server Doctor + Diagnostics
 
-- [X] T013 [P] [US1] Implement `src/gpu_directer/server/doctor.py`: `run_doctor() → DiagnosticReport` performing 6 checks in order: (1) `docker_installed` — `subprocess.run(["docker", "--version"])`, (2) `ollama_container_running` — `subprocess.run(["docker", "inspect", "--format={{.State.Running}}", "ollama"])` → must be `"true"`, (3) `gpu_passthrough` — `subprocess.run(["docker", "exec", "ollama", "nvidia-smi"])` exit code 0, (4) `tailscale_connected` — `subprocess.run(["tailscale", "status", "--json"])` parse `BackendState == "Running"` and extract IPv4, (5) `ollama_models_available` — HTTP GET `http://localhost:11434/api/tags` returns ≥1 model, (6) `queue_status` — HTTP GET `http://localhost:11434/gd/health` returns queue depth. Each check returns `{name, status, detail, fix_hint}`. Fix hints match contracts/cli-schema.md examples.
+- [X] T013 [P] [US1] Implement `src/gpu_access_router/server/doctor.py`: `run_doctor() → DiagnosticReport` performing 6 checks in order: (1) `docker_installed` — `subprocess.run(["docker", "--version"])`, (2) `ollama_container_running` — `subprocess.run(["docker", "inspect", "--format={{.State.Running}}", "ollama"])` → must be `"true"`, (3) `gpu_passthrough` — `subprocess.run(["docker", "exec", "ollama", "nvidia-smi"])` exit code 0, (4) `tailscale_connected` — `subprocess.run(["tailscale", "status", "--json"])` parse `BackendState == "Running"` and extract IPv4, (5) `ollama_models_available` — HTTP GET `http://localhost:11434/api/tags` returns ≥1 model, (6) `queue_status` — HTTP GET `http://localhost:11434/gd/health` returns queue depth. Each check returns `{name, status, detail, fix_hint}`. Fix hints match contracts/cli-schema.md examples.
 
 ### Server Setup Wizard
 
-- [X] T014 [US1] Implement `src/gpu_directer/server/setup_wizard.py`: `run_server_setup(port=11434, non_interactive=False)` function executing 9 steps: (1) detect Docker via `doctor.check_docker()`, exit with fix hint if missing; (2) detect NVIDIA drivers via `subprocess.run(["nvidia-smi"])`; (3) pull `ollama/ollama` Docker image via `subprocess.run(["docker", "pull", "ollama/ollama"])`; (4) start container: `docker run -d --gpus all --name ollama -e OLLAMA_HOST=0.0.0.0:11434 -v ollama:/root/.ollama -p {port}:{port} --restart unless-stopped ollama/ollama`; (5) wait for Ollama ready (poll `/api/tags` up to 60s); (6) check/install Tailscale via `curl -fsSL https://tailscale.com/install.sh | sh`; (7) prompt user to run `sudo tailscale up` and press Enter when done; (8) get Tailscale IPv4 from `tailscale status --json`; (9) write `[server]` section to config, print IP and next steps. All steps print Rich-formatted status lines.
+- [X] T014 [US1] Implement `src/gpu_access_router/server/setup_wizard.py`: `run_server_setup(port=11434, non_interactive=False)` function executing 9 steps: (1) detect Docker via `doctor.check_docker()`, exit with fix hint if missing; (2) detect NVIDIA drivers via `subprocess.run(["nvidia-smi"])`; (3) pull `ollama/ollama` Docker image via `subprocess.run(["docker", "pull", "ollama/ollama"])`; (4) start container: `docker run -d --gpus all --name ollama -e OLLAMA_HOST=0.0.0.0:11434 -v ollama:/root/.ollama -p {port}:{port} --restart unless-stopped ollama/ollama`; (5) wait for Ollama ready (poll `/api/tags` up to 60s); (6) check/install Tailscale via `curl -fsSL https://tailscale.com/install.sh | sh`; (7) prompt user to run `sudo tailscale up` and press Enter when done; (8) get Tailscale IPv4 from `tailscale status --json`; (9) write `[server]` section to config, print IP and next steps. All steps print Rich-formatted status lines.
 
 ### Wire Up Server CLI Commands
 
-- [X] T015 [US1] Wire `gpu-directer server setup` in `cli.py` to call `server.setup_wizard.run_server_setup(port, non_interactive)`. Display server setup wizard output with Rich formatting. Print Tailscale IP prominently on success.
-- [X] T016 [US1] Wire `gpu-directer server doctor` in `cli.py` to call `server.doctor.run_doctor()` and display Rich-formatted table: `[✓]`/`[✗]` per check, detail text, fix hint indented below failing checks. `--json` flag outputs DiagnosticReport as JSON. Exit code 1 if any check fails.
-- [X] T017 [US1] Wire `gpu-directer server models` in `cli.py` to HTTP GET `http://localhost:{port}/gd/models`, display model name/size/quantization in Rich table. `--json` flag returns raw JSON.
-- [X] T018 [US1] Wire `gpu-directer server start`, `stop`, `restart` in `cli.py` to run `docker start|stop|restart ollama` via subprocess. Print success/failure with Rich formatting.
+- [X] T015 [US1] Wire `gpu-access-router server setup` in `cli.py` to call `server.setup_wizard.run_server_setup(port, non_interactive)`. Display server setup wizard output with Rich formatting. Print Tailscale IP prominently on success.
+- [X] T016 [US1] Wire `gpu-access-router server doctor` in `cli.py` to call `server.doctor.run_doctor()` and display Rich-formatted table: `[✓]`/`[✗]` per check, detail text, fix hint indented below failing checks. `--json` flag outputs DiagnosticReport as JSON. Exit code 1 if any check fails.
+- [X] T017 [US1] Wire `gpu-access-router server models` in `cli.py` to HTTP GET `http://localhost:{port}/gd/models`, display model name/size/quantization in Rich table. `--json` flag returns raw JSON.
+- [X] T018 [US1] Wire `gpu-access-router server start`, `stop`, `restart` in `cli.py` to run `docker start|stop|restart ollama` via subprocess. Print success/failure with Rich formatting.
 
-**Checkpoint**: On Ubuntu+NVIDIA: `gpu-directer server setup` completes without errors; `gpu-directer server doctor` shows all `[✓]`; `curl http://localhost:11434/api/tags` returns models
+**Checkpoint**: On Ubuntu+NVIDIA: `gpu-access-router server setup` completes without errors; `gpu-access-router server doctor` shows all `[✓]`; `curl http://localhost:11434/api/tags` returns models
 
 ---
 
 ## Phase 4: US2 — Client Setup: Connect Client to Remote GPU Server (Priority: P1)
 
-**Goal**: A user on any macOS/Ubuntu machine runs `gpu-directer client setup`, enters the server Tailscale IP, sees available models listed, and has a saved config. `gpu-directer client status` shows server online.
+**Goal**: A user on any macOS/Ubuntu machine runs `gpu-access-router client setup`, enters the server Tailscale IP, sees available models listed, and has a saved config. `gpu-access-router client status` shows server online.
 
-**Independent Test**: With a running server (Phase 3 complete): run `gpu-directer client setup --server-ip 100.x.x.x`, confirm models listed, then run `gpu-directer client status` — server shows `● online`.
+**Independent Test**: With a running server (Phase 3 complete): run `gpu-access-router client setup --server-ip 100.x.x.x`, confirm models listed, then run `gpu-access-router client status` — server shows `● online`.
 
-- [X] T019 [P] [US2] Create `src/gpu_directer/client/connectivity.py`: `check_tailscale_installed() → bool` (FileNotFoundError on `tailscale --version`), `check_tailscale_connected() → dict` (parse `tailscale status --json`, return `{connected, own_ip}`), `probe_server(ip, port, timeout=5) → bool` (TCP `socket.connect_ex((ip, port)) == 0`), `query_server_models(ip, port) → list` (HTTP GET `/gd/models`, return model name list), `query_server_health(ip, port) → dict` (HTTP GET `/gd/health`, return health dict)
-- [X] T020 [US2] Implement `src/gpu_directer/client/setup_wizard.py`: `run_client_setup(server_ip=None, port=11434, non_interactive=False)` executing: (1) check Tailscale installed, exit with fix hint if missing; (2) check Tailscale connected, prompt user to run `sudo tailscale up` if not; (3) prompt for server Tailscale IP if not provided; (4) TCP probe to `server_ip:port`, fail with diagnostic if unreachable; (5) query `/gd/models` and display available model list; (6) prompt for routing mode (default `auto`); (7) write `[client]` section to config.toml; (8) print summary with quickstart code example. Non-interactive mode uses provided flags or exits 1 with error.
-- [X] T021 [US2] Implement `src/gpu_directer/client/status.py`: `get_client_status() → dict` querying remote server health (`/gd/health`), remote model list (`/gd/models`), and local Ollama health (`http://localhost:11434/api/tags`). Returns structured dict matching contracts/cli-schema.md `client status` output format.
-- [X] T022 [US2] Wire `gpu-directer client setup` in `cli.py` to call `client.setup_wizard.run_client_setup()`. Display wizard steps with Rich formatting. Print quickstart code snippet on success.
-- [X] T023 [US2] Wire `gpu-directer client status` in `cli.py` to call `client.status.get_client_status()` and display Rich-formatted output: server IP, `● online`/`● offline`, queue depth, routing mode, remote models, local Ollama status, local models. `--json` flag outputs raw dict. Exit code 1 if all sources offline.
-- [X] T024 [US2] Wire `gpu-directer client models` in `cli.py` to call connectivity helpers for `--source remote|local|all` and display model table with source column. `--json` flag returns structured JSON.
+- [X] T019 [P] [US2] Create `src/gpu_access_router/client/connectivity.py`: `check_tailscale_installed() → bool` (FileNotFoundError on `tailscale --version`), `check_tailscale_connected() → dict` (parse `tailscale status --json`, return `{connected, own_ip}`), `probe_server(ip, port, timeout=5) → bool` (TCP `socket.connect_ex((ip, port)) == 0`), `query_server_models(ip, port) → list` (HTTP GET `/gd/models`, return model name list), `query_server_health(ip, port) → dict` (HTTP GET `/gd/health`, return health dict)
+- [X] T020 [US2] Implement `src/gpu_access_router/client/setup_wizard.py`: `run_client_setup(server_ip=None, port=11434, non_interactive=False)` executing: (1) check Tailscale installed, exit with fix hint if missing; (2) check Tailscale connected, prompt user to run `sudo tailscale up` if not; (3) prompt for server Tailscale IP if not provided; (4) TCP probe to `server_ip:port`, fail with diagnostic if unreachable; (5) query `/gd/models` and display available model list; (6) prompt for routing mode (default `auto`); (7) write `[client]` section to config.toml; (8) print summary with quickstart code example. Non-interactive mode uses provided flags or exits 1 with error.
+- [X] T021 [US2] Implement `src/gpu_access_router/client/status.py`: `get_client_status() → dict` querying remote server health (`/gd/health`), remote model list (`/gd/models`), and local Ollama health (`http://localhost:11434/api/tags`). Returns structured dict matching contracts/cli-schema.md `client status` output format.
+- [X] T022 [US2] Wire `gpu-access-router client setup` in `cli.py` to call `client.setup_wizard.run_client_setup()`. Display wizard steps with Rich formatting. Print quickstart code snippet on success.
+- [X] T023 [US2] Wire `gpu-access-router client status` in `cli.py` to call `client.status.get_client_status()` and display Rich-formatted output: server IP, `● online`/`● offline`, queue depth, routing mode, remote models, local Ollama status, local models. `--json` flag outputs raw dict. Exit code 1 if all sources offline.
+- [X] T024 [US2] Wire `gpu-access-router client models` in `cli.py` to call connectivity helpers for `--source remote|local|all` and display model table with source column. `--json` flag returns structured JSON.
 
-**Checkpoint**: With running server: `gpu-directer client setup` completes; `gpu-directer client status` shows server online; config.toml has `[client]` section with server IP
+**Checkpoint**: With running server: `gpu-access-router client setup` completes; `gpu-access-router client status` shows server online; config.toml has `[client]` section with server IP
 
 ---
 
 ## Phase 5: US3 — Unified API: GPURouter in Application Code (Priority: P1)
 
-**Goal**: `from gpu_directer import GPURouter; router = GPURouter(); router.chat(model, messages)` routes to remote GPU server (auto mode), falls back to local Ollama if remote unreachable, emits warning if model missing on remote, raises `GPUDirecterConnectionError` if both unavailable.
+**Goal**: `from gpu_access_router import GPURouter; router = GPURouter(); router.chat(model, messages)` routes to remote GPU server (auto mode), falls back to local Ollama if remote unreachable, emits warning if model missing on remote, raises `GPUAccessRouterConnectionError` if both unavailable.
 
 **Independent Test**: Write a 5-line script using `GPURouter().chat()` with server online → routes to server. Kill server → same script routes to local Ollama (if available). Check that warning is emitted when model exists locally but not on remote.
 
-- [X] T025 [P] [US3] Implement routing logic module `src/gpu_directer/client/routing.py`: `resolve_route(config, model, prefer=None) → str` returning `"remote"` or `"local"`. Implements the 4-step decision tree from contracts/python-api.md: (1) prefer/config mode check, (2) TCP probe remote, (3) model existence check via `/gd/models`, (4) local Ollama probe. Issues `warnings.warn()` for model-missing-on-remote case. Raises `GPUDirecterConnectionError` with descriptive message when no route available.
-- [X] T026 [P] [US3] Implement `src/gpu_directer/client/poller.py`: `poll_for_result(base_url, request_id, timeout, poll_interval=1.0) → dict` that GETs `/gd/queue/{request_id}` every `poll_interval` seconds until `status` is `"complete"`, `"timeout"`, or `"error"`. Raises `GPUDirecterTimeoutError` on `status == "timeout"`. Returns Ollama-format ChatResponse dict on `"complete"`.
-- [X] T027 [US3] Implement `src/gpu_directer/client/router.py`: `GPURouter` class. `__init__(config_path=None, routing_mode=None, timeout=None)` reads config via `config.load_config()`, sets `self.routing_mode`, `self.timeout`, `self.server_ip`, `self.server_port`. Raises `GPUDirecterConfigError` on missing/invalid config. `chat(model, messages, prefer=None, timeout=None, **kwargs) → ollama.ChatResponse`: calls `routing.resolve_route()`, if `"remote"` POSTs to `/gd/chat` then polls via `poller.poll_for_result()`, if `"local"` calls `ollama.Client(host="http://localhost:11434").chat(model, messages, **kwargs)`. `list_models(source="auto") → dict` calls connectivity helpers and returns `{remote: [...], local: [...], reachable: {remote, local}}`. `status() → dict` returns full status dict.
-- [X] T028 [US3] Update `src/gpu_directer/__init__.py` to export `GPURouter` and all exception classes: `from gpu_directer.client.router import GPURouter`, `from gpu_directer.core.exceptions import *`
+- [X] T025 [P] [US3] Implement routing logic module `src/gpu_access_router/client/routing.py`: `resolve_route(config, model, prefer=None) → str` returning `"remote"` or `"local"`. Implements the 4-step decision tree from contracts/python-api.md: (1) prefer/config mode check, (2) TCP probe remote, (3) model existence check via `/gd/models`, (4) local Ollama probe. Issues `warnings.warn()` for model-missing-on-remote case. Raises `GPUAccessRouterConnectionError` with descriptive message when no route available.
+- [X] T026 [P] [US3] Implement `src/gpu_access_router/client/poller.py`: `poll_for_result(base_url, request_id, timeout, poll_interval=1.0) → dict` that GETs `/gd/queue/{request_id}` every `poll_interval` seconds until `status` is `"complete"`, `"timeout"`, or `"error"`. Raises `GPUAccessRouterTimeoutError` on `status == "timeout"`. Returns Ollama-format ChatResponse dict on `"complete"`.
+- [X] T027 [US3] Implement `src/gpu_access_router/client/router.py`: `GPURouter` class. `__init__(config_path=None, routing_mode=None, timeout=None)` reads config via `config.load_config()`, sets `self.routing_mode`, `self.timeout`, `self.server_ip`, `self.server_port`. Raises `GPUAccessRouterConfigError` on missing/invalid config. `chat(model, messages, prefer=None, timeout=None, **kwargs) → ollama.ChatResponse`: calls `routing.resolve_route()`, if `"remote"` POSTs to `/gd/chat` then polls via `poller.poll_for_result()`, if `"local"` calls `ollama.Client(host="http://localhost:11434").chat(model, messages, **kwargs)`. `list_models(source="auto") → dict` calls connectivity helpers and returns `{remote: [...], local: [...], reachable: {remote, local}}`. `status() → dict` returns full status dict.
+- [X] T028 [US3] Update `src/gpu_access_router/__init__.py` to export `GPURouter` and all exception classes: `from gpu_access_router.client.router import GPURouter`, `from gpu_access_router.core.exceptions import *`
 - [X] T029 [US3] Validate `GPURouter` drop-in compatibility: ensure `router.chat()` return type is `ollama.ChatResponse` (not a custom wrapper) so existing Ollama SDK usage is directly replaceable. Update `poller.py` to reconstruct `ollama.ChatResponse` from server response dict.
 
-**Checkpoint**: `from gpu_directer import GPURouter; router = GPURouter(); r = router.chat("llama3.2", [{"role":"user","content":"hi"}]); print(r.message.content)` works end-to-end with remote server
+**Checkpoint**: `from gpu_access_router import GPURouter; router = GPURouter(); r = router.chat("llama3.2", [{"role":"user","content":"hi"}]); print(r.message.content)` works end-to-end with remote server
 
 ---
 
@@ -119,23 +119,23 @@ description: "Task list for GPU Directer Toolkit implementation"
 - [X] T030 [P] [US4] Connect `SerialQueue` config to `config.py`: update `server/api.py` startup to read `server.queue_timeout` and `server.max_queue_depth` from config.toml and pass to `SerialQueue.__init__()`. Add validation that `max_queue_depth=0` means unlimited.
 - [X] T031 [US4] Implement queue full rejection in `server/api.py`: `POST /gd/chat` returns HTTP 503 with `{error: "Queue full", max_depth, current_depth}` when `SerialQueue.get_depth() >= max_depth` (and `max_depth > 0`). Wire `server.max_queue_depth` config setting.
 - [X] T032 [US4] Add queue depth to `GET /gd/health` response and ensure `server/doctor.py` `queue_status` check reads live depth from running FastAPI process (via HTTP, not in-process).
-- [X] T033 [US4] Verify `GPUDirecterTimeoutError` propagates correctly end-to-end: `server/queue.py` sets `status="timeout"` on `asyncio.TimeoutError`; `client/poller.py` raises `GPUDirecterTimeoutError` with message `"Request {request_id} exceeded queue timeout of {timeout}s"`.
+- [X] T033 [US4] Verify `GPUAccessRouterTimeoutError` propagates correctly end-to-end: `server/queue.py` sets `status="timeout"` on `asyncio.TimeoutError`; `client/poller.py` raises `GPUAccessRouterTimeoutError` with message `"Request {request_id} exceeded queue timeout of {timeout}s"`.
 
-**Checkpoint**: Concurrent requests queue correctly; queue depth visible in `gpu-directer client status`; timeout releases slot
+**Checkpoint**: Concurrent requests queue correctly; queue depth visible in `gpu-access-router client status`; timeout releases slot
 
 ---
 
 ## Phase 7: US5 — GitHub Install: pip install from GitHub (Priority: P2)
 
-**Goal**: `pip install "git+https://github.com/.../GPU-Directer-toolkit.git[client]"` on a fresh macOS or Ubuntu machine with Python 3.8+ installs successfully with no manual steps. `gpu-directer --help` and `from gpu_directer import GPURouter` both work.
+**Goal**: `pip install "git+https://github.com/.../GPU-Access-Router-toolkit.git[client]"` on a fresh macOS or Ubuntu machine with Python 3.8+ installs successfully with no manual steps. `gpu-access-router --help` and `from gpu_access_router import GPURouter` both work.
 
-**Independent Test**: Create fresh Python 3.8 venv, run `pip install "git+https://...GPU-Directer-toolkit.git[client]"`, then run `gpu-directer --help` and `python -c "from gpu_directer import GPURouter"` — both succeed.
+**Independent Test**: Create fresh Python 3.8 venv, run `pip install "git+https://...GPU-Access-Router-toolkit.git[client]"`, then run `gpu-access-router --help` and `python -c "from gpu_access_router import GPURouter"` — both succeed.
 
 - [X] T034 [P] [US5] Finalize `pyproject.toml`: verify `[all]` extra correctly references both server and client, add `python_requires=">=3.8"`, add `long_description` from `README.md`, add `classifiers`, verify `console_scripts` entry point is correct. Confirm `tomli` conditional dependency (`; python_version < "3.11"`) works for 3.8–3.10.
-- [X] T035 [P] [US5] Implement `--version` flag on `main` CLI group in `cli.py`: reads `__version__` from `gpu_directer.__version__`, prints `gpu-directer {version}`.
-- [X] T036 [US5] Validate client-only install isolation: confirm `pip install gpu-directer[client]` does NOT install `fastapi` or `uvicorn`. Confirm `gpu-directer server setup` on a client-only install prints actionable error: `"Server dependencies not installed. Install with: pip install gpu-directer[server]"` and exits 1.
-- [X] T037 [US5] Validate server-only install isolation: confirm `pip install gpu-directer[server]` does NOT break `import gpu_directer`. Confirm `from gpu_directer import GPURouter` on server-only install works (GPURouter only needs `ollama` which is a server dep).
-- [X] T038 [US5] Add `.gitignore` covering `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `.venv/`, `~/.gpu-directer/` hint in README.
+- [X] T035 [P] [US5] Implement `--version` flag on `main` CLI group in `cli.py`: reads `__version__` from `gpu_access_router.__version__`, prints `gpu-access-router {version}`.
+- [X] T036 [US5] Validate client-only install isolation: confirm `pip install gpu-access-router[client]` does NOT install `fastapi` or `uvicorn`. Confirm `gpu-access-router server setup` on a client-only install prints actionable error: `"Server dependencies not installed. Install with: pip install gpu-access-router[server]"` and exits 1.
+- [X] T037 [US5] Validate server-only install isolation: confirm `pip install gpu-access-router[server]` does NOT break `import gpu_access_router`. Confirm `from gpu_access_router import GPURouter` on server-only install works (GPURouter only needs `ollama` which is a server dep).
+- [X] T038 [US5] Add `.gitignore` covering `__pycache__/`, `*.egg-info/`, `dist/`, `build/`, `.venv/`, `~/.gpu-access-router/` hint in README.
 
 **Checkpoint**: Fresh venv install of `[client]`, `[server]`, and `[all]` extras all succeed; correct commands available per role
 
@@ -149,8 +149,8 @@ description: "Task list for GPU Directer Toolkit implementation"
 
 - [X] T039 [P] [US6] Write `README.md` Part 1: project overview, architecture diagram (ASCII), two-role explanation (gpu-server vs gpu-client), requirements table (server: Ubuntu+NVIDIA+Docker; client: macOS/Ubuntu+Python 3.8+)
 - [X] T040 [P] [US6] Write `README.md` Part 2 — Tailscale Setup Guide (≤10 steps): create account, install on server (Ubuntu one-liner), install on client (macOS/Ubuntu), authenticate both devices, `tailscale ip -4` to get server IP, verify with ping
-- [X] T041 [US6] Write `README.md` Part 3 — Server Quick-Start (≤15 steps): `pip install ...[server]`, `gpu-directer server setup`, `docker exec ollama ollama pull llama3.2`, `gpu-directer server doctor`
-- [X] T042 [US6] Write `README.md` Part 4 — Client Quick-Start (≤15 steps): `pip install ...[client]`, `gpu-directer client setup`, `gpu-directer client status`, first `GPURouter` code example (3 lines)
+- [X] T041 [US6] Write `README.md` Part 3 — Server Quick-Start (≤15 steps): `pip install ...[server]`, `gpu-access-router server setup`, `docker exec ollama ollama pull llama3.2`, `gpu-access-router server doctor`
+- [X] T042 [US6] Write `README.md` Part 4 — Client Quick-Start (≤15 steps): `pip install ...[client]`, `gpu-access-router client setup`, `gpu-access-router client status`, first `GPURouter` code example (3 lines)
 - [X] T043 [US6] Write `README.md` Part 5 — Configuration Reference: complete `config.toml` schema table, `config set` examples for all common settings, explanation of routing modes (`auto`/`remote`/`local`)
 - [X] T044 [US6] Write `README.md` Part 6 — Complete Command Reference: full command table matching `contracts/cli-schema.md`, Troubleshooting section covering top 4 failure scenarios (server unreachable, GPU not detected, queue full, model not found warning)
 
@@ -162,10 +162,10 @@ description: "Task list for GPU Directer Toolkit implementation"
 
 **Purpose**: Config CLI commands, global flags, output consistency across all commands
 
-- [X] T045 [P] Implement `gpu-directer config show` in `cli.py`: call `config.load_config()`, format all sections as readable key=value pairs with Rich (or JSON with `--json`). Group by `[client]`, `[server]`, `[meta]` sections. Show config file path in header.
-- [X] T046 [P] Implement `gpu-directer config set <key>=<value>` in `cli.py`: parse `key=value` argument, call `config.set_value(key, value)` which validates type/range, save config. Print confirmation `Set client.routing_mode = local`. Print error on unknown key or invalid value.
-- [X] T047 [P] Implement `gpu-directer config edit` in `cli.py`: resolve `~/.gpu-directer/config.toml`, open with `os.environ.get("EDITOR", "nano")` via `subprocess.run()`. Create config file with defaults first if it doesn't exist.
-- [X] T048 [P] Implement `gpu-directer config reset` in `cli.py`: prompt for confirmation (skip with `--yes`), overwrite config with `config.create_default_config()`. Print confirmation and path.
+- [X] T045 [P] Implement `gpu-access-router config show` in `cli.py`: call `config.load_config()`, format all sections as readable key=value pairs with Rich (or JSON with `--json`). Group by `[client]`, `[server]`, `[meta]` sections. Show config file path in header.
+- [X] T046 [P] Implement `gpu-access-router config set <key>=<value>` in `cli.py`: parse `key=value` argument, call `config.set_value(key, value)` which validates type/range, save config. Print confirmation `Set client.routing_mode = local`. Print error on unknown key or invalid value.
+- [X] T047 [P] Implement `gpu-access-router config edit` in `cli.py`: resolve `~/.gpu-access-router/config.toml`, open with `os.environ.get("EDITOR", "nano")` via `subprocess.run()`. Create config file with defaults first if it doesn't exist.
+- [X] T048 [P] Implement `gpu-access-router config reset` in `cli.py`: prompt for confirmation (skip with `--yes`), overwrite config with `config.create_default_config()`. Print confirmation and path.
 - [X] T049 Audit all CLI commands for consistent `--json` output: verify every command's `--json` path returns valid JSON to stdout with no extra text. Verify all error messages go to stderr regardless of `--json` flag.
 - [X] T050 Audit all CLI commands for `--quiet` flag: suppress all Rich formatting and informational lines; only print final result or errors.
 - [X] T051 Wire global `--config PATH` option in `cli.py` `main` group: use Click's `Context` to pass custom config path to all sub-commands. All `config.load_config()` calls respect this override.
@@ -244,14 +244,14 @@ T045 (config show)  T046 (config set)  T047 (config edit)  T048 (config reset)
 1. Complete Phase 1: Setup
 2. Complete Phase 2: Foundation
 3. Complete Phase 3: US1 (T011–T018)
-4. **STOP and VALIDATE**: `gpu-directer server setup` + `server doctor` both work on Ubuntu+NVIDIA
+4. **STOP and VALIDATE**: `gpu-access-router server setup` + `server doctor` both work on Ubuntu+NVIDIA
 5. Server is ready for client connections
 
 ### Incremental Delivery
 
 1. **Phases 1–2** → Foundation ready
 2. **Phase 3 (US1)** → Server functional; clients can connect manually with raw Ollama SDK
-3. **Phase 4 (US2)** → Client setup wizard; `gpu-directer client status` works
+3. **Phase 4 (US2)** → Client setup wizard; `gpu-access-router client status` works
 4. **Phase 5 (US3)** → `GPURouter` API works; developers can use the toolkit in projects
 5. **Phase 6 (US4)** → Concurrent requests safe; queue hardened
 6. **Phase 7 (US5)** → GitHub install validated; open-source ready

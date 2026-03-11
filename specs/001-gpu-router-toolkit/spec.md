@@ -1,4 +1,4 @@
-# Feature Specification: GPU Directer Toolkit
+# Feature Specification: GPU Access Router Toolkit
 
 **Feature Branch**: `001-gpu-router-toolkit`
 **Created**: 2026-03-11
@@ -10,7 +10,7 @@
 ### Session 2026-03-11
 
 - Q: How should users override the default remote-first routing preference? → A: Config file sets the default routing mode (`remote`, `local`, or `auto`); a `prefer=` parameter on each API call allows per-call override without changing config.
-- Q: What is the primary mechanism for viewing and editing configuration? → A: An editable plain-text config file (`~/.gpu-directer/config.toml`) plus CLI commands: `gpu-directer config show`, `config set key=value`, and `config edit` (opens in $EDITOR).
+- Q: What is the primary mechanism for viewing and editing configuration? → A: An editable plain-text config file (`~/.gpu-access-router/config.toml`) plus CLI commands: `gpu-access-router config show`, `config set key=value`, and `config edit` (opens in $EDITOR).
 - Q: What should the server diagnostic command check and report? → A: Extended checks — Docker installed, Ollama container running, GPU passthrough working, Tailscale connected, available models listed, queue status — each with pass/fail result and a one-line fix hint on failure.
 - Q: What should the router do when the requested model is missing on the remote server but exists locally (routing mode `auto`)? → A: Fall back to local Ollama and emit a warning message stating the remote server does not have the requested model.
 - Q: What should the default per-request queue wait timeout be? → A: 300 seconds (5 minutes); users can override via config file or `prefer=timeout` per-call.
@@ -19,7 +19,7 @@
 
 ## Overview
 
-GPU Directer is a modular, pip-installable Python toolkit that enables developers to use a remote GPU machine (gpu-server) from any laptop or cloud environment (gpu-client) over a private Tailscale network. The toolkit automatically detects the best available GPU source—preferring the remote GPU server—and provides a unified API so application code never needs to change. A serial request queue on the server ensures only one inference runs at a time, preventing GPU out-of-memory crashes.
+GPU Access Router is a modular, pip-installable Python toolkit that enables developers to use a remote GPU machine (gpu-server) from any laptop or cloud environment (gpu-client) over a private Tailscale network. The toolkit automatically detects the best available GPU source—preferring the remote GPU server—and provides a unified API so application code never needs to change. A serial request queue on the server ensures only one inference runs at a time, preventing GPU out-of-memory crashes.
 
 **Two roles:**
 - **gpu-server**: Ubuntu machine with NVIDIA GPU, running Ollama in Docker, reachable via Tailscale
@@ -31,7 +31,7 @@ GPU Directer is a modular, pip-installable Python toolkit that enables developer
 
 ### User Story 1 - Server Setup: Install and Configure GPU Server (Priority: P1)
 
-A developer with a desktop GPU machine installs `gpu-directer[server]` and runs an interactive setup wizard. The wizard checks for Docker, pulls the Ollama Docker image, configures NVIDIA GPU passthrough, installs Tailscale, and prints the Tailscale IP address. After setup completes, the machine is ready to accept inference requests from clients.
+A developer with a desktop GPU machine installs `gpu-access-router[server]` and runs an interactive setup wizard. The wizard checks for Docker, pulls the Ollama Docker image, configures NVIDIA GPU passthrough, installs Tailscale, and prints the Tailscale IP address. After setup completes, the machine is ready to accept inference requests from clients.
 
 **Why this priority**: Without a properly configured server, no client functionality is possible. This is the foundation of the entire system.
 
@@ -39,31 +39,31 @@ A developer with a desktop GPU machine installs `gpu-directer[server]` and runs 
 
 **Acceptance Scenarios**:
 
-1. **Given** a fresh Ubuntu machine with an NVIDIA GPU and Docker installed, **When** the user runs `gpu-directer server setup`, **Then** Ollama Docker container starts with GPU access, Tailscale is installed and authenticated, and the server prints its Tailscale IP.
+1. **Given** a fresh Ubuntu machine with an NVIDIA GPU and Docker installed, **When** the user runs `gpu-access-router server setup`, **Then** Ollama Docker container starts with GPU access, Tailscale is installed and authenticated, and the server prints its Tailscale IP.
 2. **Given** the server is running, **When** a client queries the server's health endpoint, **Then** the server responds with its status, available models, and current queue depth.
-3. **Given** Docker is not installed, **When** the user runs `gpu-directer server setup`, **Then** the wizard detects the missing dependency, prints a clear installation instruction, and exits gracefully without partial setup.
+3. **Given** Docker is not installed, **When** the user runs `gpu-access-router server setup`, **Then** the wizard detects the missing dependency, prints a clear installation instruction, and exits gracefully without partial setup.
 
 ---
 
 ### User Story 2 - Client Setup: Connect Client to Remote GPU Server (Priority: P1)
 
-A developer on a laptop or Oracle Cloud instance installs `gpu-directer[client]` and runs an interactive setup wizard. The wizard asks for the server's Tailscale IP, tests connectivity, lists available Ollama models on the server, and saves the configuration. Going forward, any project on this machine can import `GPURouter` and call LLMs without specifying a host.
+A developer on a laptop or Oracle Cloud instance installs `gpu-access-router[client]` and runs an interactive setup wizard. The wizard asks for the server's Tailscale IP, tests connectivity, lists available Ollama models on the server, and saves the configuration. Going forward, any project on this machine can import `GPURouter` and call LLMs without specifying a host.
 
 **Why this priority**: Client setup is the primary developer experience—it must be frictionless and verifiable before any project integration is useful.
 
-**Independent Test**: Can be tested by installing the client package on a second machine connected to the same Tailscale network, running `gpu-directer client setup`, and confirming it discovers and lists the server's models.
+**Independent Test**: Can be tested by installing the client package on a second machine connected to the same Tailscale network, running `gpu-access-router client setup`, and confirming it discovers and lists the server's models.
 
 **Acceptance Scenarios**:
 
-1. **Given** Tailscale is installed and authenticated on both machines, **When** the user runs `gpu-directer client setup` and enters the server's Tailscale IP, **Then** the client verifies connectivity, lists all available Ollama models, and saves the configuration.
-2. **Given** the server is unreachable (wrong IP or offline), **When** the user runs `gpu-directer client setup`, **Then** the wizard reports the connectivity failure with a diagnostic message and does not save a broken configuration.
-3. **Given** setup is complete, **When** the user runs `gpu-directer client status`, **Then** the output shows the server address, current server status (online/offline), queue depth, and available models.
+1. **Given** Tailscale is installed and authenticated on both machines, **When** the user runs `gpu-access-router client setup` and enters the server's Tailscale IP, **Then** the client verifies connectivity, lists all available Ollama models, and saves the configuration.
+2. **Given** the server is unreachable (wrong IP or offline), **When** the user runs `gpu-access-router client setup`, **Then** the wizard reports the connectivity failure with a diagnostic message and does not save a broken configuration.
+3. **Given** setup is complete, **When** the user runs `gpu-access-router client status`, **Then** the output shows the server address, current server status (online/offline), queue depth, and available models.
 
 ---
 
 ### User Story 3 - Unified API: Developer Uses GPURouter in Application Code (Priority: P1)
 
-A developer adds `from gpu_directer import GPURouter` to their project and calls `router.chat(model, messages)`. The router automatically tries the remote GPU server first; if unavailable, it falls back to local Ollama. The developer's code never changes between environments.
+A developer adds `from gpu_access_router import GPURouter` to their project and calls `router.chat(model, messages)`. The router automatically tries the remote GPU server first; if unavailable, it falls back to local Ollama. The developer's code never changes between environments.
 
 **Why this priority**: The unified API is the core value proposition—it makes GPU resources transparent and portable across all environments.
 
@@ -100,13 +100,13 @@ A developer finds the project on GitHub and installs it with a single `pip insta
 
 **Why this priority**: GitHub-based installation is the primary distribution mechanism for open-source adoption. It must be zero-friction.
 
-**Independent Test**: Can be tested by running `pip install git+https://github.com/.../GPU-Directer-toolkit.git[client]` on a fresh macOS and Ubuntu environment and verifying the CLI tools and Python import work.
+**Independent Test**: Can be tested by running `pip install git+https://github.com/.../GPU-Access-Router-toolkit.git[client]` on a fresh macOS and Ubuntu environment and verifying the CLI tools and Python import work.
 
 **Acceptance Scenarios**:
 
-1. **Given** a machine with Python 3.8+ and pip, **When** the user runs `pip install git+https://...GPU-Directer-toolkit.git[client]`, **Then** the client tools and Python package install successfully with no manual dependency steps.
-2. **Given** the package is installed, **When** the user runs `gpu-directer --help`, **Then** a clear help page with all available commands is shown.
-3. **Given** a fresh Ubuntu server, **When** the user runs `pip install git+https://...GPU-Directer-toolkit.git[server]`, **Then** server setup tools are available and the install succeeds.
+1. **Given** a machine with Python 3.8+ and pip, **When** the user runs `pip install git+https://...GPU-Access-Router-toolkit.git[client]`, **Then** the client tools and Python package install successfully with no manual dependency steps.
+2. **Given** the package is installed, **When** the user runs `gpu-access-router --help`, **Then** a clear help page with all available commands is shown.
+3. **Given** a fresh Ubuntu server, **When** the user runs `pip install git+https://...GPU-Access-Router-toolkit.git[server]`, **Then** server setup tools are available and the install succeeds.
 
 ---
 
@@ -150,13 +150,13 @@ A new user finds the project on GitHub, reads the README, follows the Tailscale 
 - **FR-004**: The server MUST implement a serial request queue: only one inference request is processed at a time; all others wait in queue.
 - **FR-005**: The server MUST enforce a configurable per-request queue wait timeout (default: 300 seconds), releasing the queue slot and returning an error to the client if the timeout is exceeded.
 - **FR-006**: The server setup wizard MUST detect and report missing prerequisites (Docker, NVIDIA drivers, Tailscale) with actionable instructions before attempting configuration.
-- **FR-006a**: The server MUST provide a `gpu-directer server doctor` diagnostic command that checks and reports pass/fail with a one-line fix hint for each of: Docker installed, Ollama container running, GPU passthrough active, Tailscale connected, at least one model available, queue depth.
-- **FR-007**: The server MUST provide a command (`gpu-directer server models`) to list currently loaded Ollama models and their availability.
+- **FR-006a**: The server MUST provide a `gpu-access-router server doctor` diagnostic command that checks and reports pass/fail with a one-line fix hint for each of: Docker installed, Ollama container running, GPU passthrough active, Tailscale connected, at least one model available, queue depth.
+- **FR-007**: The server MUST provide a command (`gpu-access-router server models`) to list currently loaded Ollama models and their availability.
 
 **Client Role**
 
-- **FR-008**: The client component MUST provide an interactive setup wizard that accepts the server's Tailscale IP, verifies connectivity, and saves the configuration to `~/.gpu-directer/config.toml`.
-- **FR-008a**: The toolkit MUST provide `gpu-directer config show` (display all settings), `gpu-directer config set <key>=<value>` (update a single setting), and `gpu-directer config edit` (open config file in $EDITOR) commands for both client and server roles.
+- **FR-008**: The client component MUST provide an interactive setup wizard that accepts the server's Tailscale IP, verifies connectivity, and saves the configuration to `~/.gpu-access-router/config.toml`.
+- **FR-008a**: The toolkit MUST provide `gpu-access-router config show` (display all settings), `gpu-access-router config set <key>=<value>` (update a single setting), and `gpu-access-router config edit` (open config file in $EDITOR) commands for both client and server roles.
 - **FR-008b**: The config file MUST use a human-readable plain-text format (TOML) so users can directly open and edit it without CLI assistance.
 - **FR-009**: During client setup, the wizard MUST query the server and display all available Ollama models to confirm the connection is working.
 - **FR-010**: The client MUST provide a `GPURouter` class with a unified API that routes requests according to a configurable routing mode: `auto` (remote first, local fallback), `remote` (remote only), or `local` (local only). Default mode is `auto`.
@@ -170,7 +170,7 @@ A new user finds the project on GitHub, reads the README, follows the Tailscale 
 **Package & Distribution**
 
 - **FR-015**: The toolkit MUST be installable via `pip install git+https://github.com/...` with role-specific extras: `[server]`, `[client]`, or `[all]`.
-- **FR-016**: The package MUST provide a `gpu-directer` CLI entrypoint with sub-commands for setup, status, diagnostics, and config management for both roles. The full command surface MUST be documented in the README.
+- **FR-016**: The package MUST provide a `gpu-access-router` CLI entrypoint with sub-commands for setup, status, diagnostics, and config management for both roles. The full command surface MUST be documented in the README.
 - **FR-017**: The package MUST support Python 3.8+ on Ubuntu and macOS.
 
 **Documentation**
@@ -186,7 +186,7 @@ A new user finds the project on GitHub, reads the README, follows the Tailscale 
 - **GPURouter**: The Python object used in application code; holds routing logic, priority list, and fallback behavior; stateless per-call.
 - **InferenceRequest**: A single LLM call with a model name, message list, and optional parameters; has a queue position, status (waiting/processing/complete/timeout), and response.
 - **RequestQueue**: Server-side serial queue; enforces one-at-a-time processing; tracks position, timestamps, and timeout.
-- **Configuration**: A TOML file at `~/.gpu-directer/config.toml` (per machine) storing Tailscale IPs, timeout values, routing mode (`auto`/`remote`/`local`), fallback preferences, and model preferences. Managed via `gpu-directer config` commands or direct file editing.
+- **Configuration**: A TOML file at `~/.gpu-access-router/config.toml` (per machine) storing Tailscale IPs, timeout values, routing mode (`auto`/`remote`/`local`), fallback preferences, and model preferences. Managed via `gpu-access-router config` commands or direct file editing.
 
 ---
 

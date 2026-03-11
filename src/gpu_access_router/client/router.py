@@ -5,8 +5,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
-from gpu_directer.core.exceptions import GPUDirecterConfigError, GPUDirecterConnectionError
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
+from gpu_access_router.core.exceptions import GPUAccessRouterConfigError, GPUAccessRouterConnectionError
 
 
 class GPURouter:
@@ -14,7 +14,7 @@ class GPURouter:
 
     Usage::
 
-        from gpu_directer import GPURouter
+        from gpu_access_router import GPURouter
 
         router = GPURouter()
         response = router.chat("llama3.2", [{"role": "user", "content": "Hello!"}])
@@ -27,15 +27,15 @@ class GPURouter:
         routing_mode: Optional[str] = None,
         timeout: Optional[int] = None,
     ):
-        from gpu_directer import config as cfg_mod
+        from gpu_access_router import config as cfg_mod
 
         try:
             self._config = cfg_mod.load_config(config_path)
             cfg_mod.validate_config(self._config)
-        except GPUDirecterConfigError:
+        except GPUAccessRouterConfigError:
             raise
         except Exception as exc:
-            raise GPUDirecterConfigError(f"Failed to load config: {exc}") from exc
+            raise GPUAccessRouterConfigError(f"Failed to load config: {exc}") from exc
 
         self._config_path = config_path
         client_cfg = self._config.get("client", {})
@@ -65,7 +65,7 @@ class GPURouter:
 
         Returns an ollama.ChatResponse (identical to ollama.Client.chat()).
         """
-        from gpu_directer.client.routing import resolve_route
+        from gpu_access_router.client.routing import resolve_route
 
         effective_timeout = timeout or self.timeout
 
@@ -78,10 +78,10 @@ class GPURouter:
 
     def _chat_remote(self, model, messages, timeout, **kwargs):
         """POST to /gd/chat and wait for the result (server blocks until inference completes)."""
-        from gpu_directer.client.poller import _reconstruct_chat_response
+        from gpu_access_router.client.poller import _reconstruct_chat_response
 
         if not self.server_ip:
-            raise GPUDirecterConnectionError("No server_ip configured.")
+            raise GPUAccessRouterConnectionError("No server_ip configured.")
 
         base_url = f"http://{self.server_ip}:{self.server_port}"
         payload = {
@@ -109,19 +109,19 @@ class GPURouter:
             except Exception:
                 pass
             if exc.code == 503:
-                raise GPUDirecterConnectionError(
+                raise GPUAccessRouterConnectionError(
                     f"Server queue full or unavailable. "
-                    f"Run 'gpu-directer server restart' on the server. Detail: {body}"
+                    f"Run 'gpu-access-router server restart' on the server. Detail: {body}"
                 ) from exc
             if exc.code == 408:
-                raise GPUDirecterConnectionError(
+                raise GPUAccessRouterConnectionError(
                     f"Inference timed out on server after {timeout}s."
                 ) from exc
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 f"Server returned HTTP {exc.code}: {body}"
             ) from exc
         except Exception as exc:
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 f"Failed to connect to {base_url}/gd/chat: {exc}"
             ) from exc
 
@@ -143,7 +143,7 @@ class GPURouter:
                 "reachable": {"remote": bool, "local": bool}
             }
         """
-        from gpu_directer.client.connectivity import (
+        from gpu_access_router.client.connectivity import (
             probe_server,
             query_local_models,
             query_server_models,
@@ -172,13 +172,13 @@ class GPURouter:
 
     def status(self) -> Dict[str, Any]:
         """Return connectivity and queue status for all sources."""
-        from gpu_directer.client.connectivity import (
+        from gpu_access_router.client.connectivity import (
             probe_server,
             query_local_models,
             query_server_health,
             query_server_models,
         )
-        from gpu_directer.core.constants import CONFIG_PATH
+        from gpu_access_router.core.constants import CONFIG_PATH
 
         remote: Dict[str, Any] = {
             "reachable": False,

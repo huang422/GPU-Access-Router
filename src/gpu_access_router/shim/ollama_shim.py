@@ -22,7 +22,7 @@ from typing import List, Optional
 def _load_server_info():
     """Return (server_ip, server_port) if remote config is active, else (None, None)."""
     try:
-        from gpu_directer import config as cfg_mod
+        from gpu_access_router import config as cfg_mod
         cfg = cfg_mod.load_config()
         client = cfg.get("client", {})
         routing_mode = client.get("routing_mode", "auto")
@@ -61,7 +61,7 @@ def _cmd_list(server_ip: str, server_port: int) -> int:
     try:
         models = _fetch_remote_models(server_ip, server_port)
     except Exception as exc:
-        print(f"[gpu-directer] Cannot reach remote server: {exc}", file=sys.stderr)
+        print(f"[gpu-access-router] Cannot reach remote server: {exc}", file=sys.stderr)
         return 1
 
     print(f"NAME{'':40}ID{'':14}SIZE      MODIFIED")
@@ -82,7 +82,7 @@ def _cmd_show(model: str, server_ip: str, server_port: int) -> int:
     try:
         models = _fetch_remote_models(server_ip, server_port)
     except Exception as exc:
-        print(f"[gpu-directer] Cannot reach remote server: {exc}", file=sys.stderr)
+        print(f"[gpu-access-router] Cannot reach remote server: {exc}", file=sys.stderr)
         return 1
 
     match = next((m for m in models if m.get("name", "") == model), None)
@@ -92,7 +92,7 @@ def _cmd_show(model: str, server_ip: str, server_port: int) -> int:
 
     if match is None:
         available = ", ".join(m.get("name", "") for m in models) or "none"
-        print(f"[gpu-directer] Model '{model}' not found on remote server.", file=sys.stderr)
+        print(f"[gpu-access-router] Model '{model}' not found on remote server.", file=sys.stderr)
         print(f"  Available: {available}", file=sys.stderr)
         return 1
 
@@ -104,7 +104,7 @@ def _cmd_show(model: str, server_ip: str, server_port: int) -> int:
     params = (match.get("details") or {}).get("parameter_size", "")
     quant = (match.get("details") or {}).get("quantization_level", "")
 
-    print(f"  Model")
+    print("  Model")
     print(f"    name:       {name}")
     print(f"    size:       {size}")
     print(f"    digest:     {digest}")
@@ -130,7 +130,7 @@ def _cmd_ps(server_ip: str, server_port: int) -> int:
         ) as resp:
             queue = json.loads(resp.read())
     except Exception as exc:
-        print(f"[gpu-directer] Cannot reach remote server: {exc}", file=sys.stderr)
+        print(f"[gpu-access-router] Cannot reach remote server: {exc}", file=sys.stderr)
         return 1
 
     processing = health.get("processing", False)
@@ -154,7 +154,7 @@ def _cmd_ps(server_ip: str, server_port: int) -> int:
 def _cmd_run_remote(model: str, prompt: str) -> int:
     """ollama run <model> <prompt> — proxy single-shot inference to remote GPU."""
     try:
-        from gpu_directer.client.router import GPURouter
+        from gpu_access_router.client.router import GPURouter
         router = GPURouter()
         response = router.chat(
             model=model,
@@ -164,8 +164,8 @@ def _cmd_run_remote(model: str, prompt: str) -> int:
         print(response.message.content)
         return 0
     except Exception as exc:
-        print(f"[gpu-directer] Remote inference failed: {exc}", file=sys.stderr)
-        print("[gpu-directer] Falling back to local ollama...", file=sys.stderr)
+        print(f"[gpu-access-router] Remote inference failed: {exc}", file=sys.stderr)
+        print("[gpu-access-router] Falling back to local ollama...", file=sys.stderr)
         return _passthrough(["run", model, prompt])
 
 
@@ -186,9 +186,9 @@ def _cmd_ssh_only(subcmd: str, server_ip: str, extra_args: List[str]) -> int:
     native_cmd = f"ollama {subcmd} {extra}".strip()
     docker_cmd = DOCKER_CMDS.get(subcmd, native_cmd)
 
-    print(f"[gpu-directer] '{subcmd}' must run on the remote GPU server.")
-    print(f"  SSH in and run:")
-    print(f"")
+    print(f"[gpu-access-router] '{subcmd}' must run on the remote GPU server.")
+    print("  SSH in and run:")
+    print()
     print(f"    ssh <user>@{server_ip}")
     print(f"    {native_cmd}      # native Ollama")
     print(f"    {docker_cmd}      # Docker Ollama")
@@ -214,7 +214,7 @@ def _passthrough(args: List[str]) -> int:
     """Exec the real ollama with the given args."""
     real = _find_real_ollama()
     if not real:
-        print("[gpu-directer] Real 'ollama' binary not found in PATH.", file=sys.stderr)
+        print("[gpu-access-router] Real 'ollama' binary not found in PATH.", file=sys.stderr)
         return 1
     result = subprocess.run([real] + args)
     return result.returncode

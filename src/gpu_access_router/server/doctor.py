@@ -7,7 +7,7 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
 
 
 def _check(name: str, status: str, detail: str, fix_hint: str = "") -> Dict[str, str]:
@@ -139,7 +139,7 @@ def check_ollama_models(port: int = DEFAULT_PORT) -> Dict[str, str]:
         return _check(
             "ollama_models_available", "fail",
             f"Could not reach Ollama: {exc}",
-            "Ensure container is running: gpu-directer server start",
+            "Ensure container is running: gpu-access-router server start",
         )
 
 
@@ -159,8 +159,8 @@ def check_queue_status(api_port: int = DEFAULT_API_PORT) -> Dict[str, str]:
     except Exception as exc:
         return _check(
             "queue_status", "fail",
-            f"GPU Directer server API not reachable: {exc}",
-            "Start the server: gpu-directer server serve",
+            f"GPU Access Router server API not reachable: {exc}",
+            "Start the server: gpu-access-router server serve",
         )
 
 

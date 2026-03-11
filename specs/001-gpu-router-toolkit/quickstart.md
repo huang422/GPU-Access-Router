@@ -1,4 +1,4 @@
-# Quickstart: GPU Directer Toolkit
+# Quickstart: GPU Access Router Toolkit
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11
 
@@ -60,24 +60,24 @@ If you see replies, Tailscale is working.
 
 ## Part 2: GPU Server Setup
 
-### 2.1 Install GPU Directer server
+### 2.1 Install GPU Access Router server
 
 On the GPU server:
 ```bash
-pip install "git+https://github.com/your-account/GPU-Directer-toolkit.git[server]"
+pip install "git+https://github.com/your-account/GPU-Access-Router-toolkit.git[server]"
 ```
 
 ### 2.2 Run the setup wizard
 
 ```bash
-gpu-directer server setup
+gpu-access-router server setup
 ```
 
 The wizard will:
 - Check Docker and NVIDIA drivers
 - Pull and start the `ollama/ollama` Docker container with GPU access
 - Configure Ollama to accept connections from the Tailscale network
-- Write server configuration to `~/.gpu-directer/config.toml`
+- Write server configuration to `~/.gpu-access-router/config.toml`
 - Print your Tailscale IP and confirmation that the server is ready
 
 ### 2.3 Pull at least one model
@@ -89,7 +89,7 @@ docker exec ollama ollama pull llama3.2
 ### 2.4 Verify server health
 
 ```bash
-gpu-directer server doctor
+gpu-access-router server doctor
 ```
 
 All checks should show `[✓]`. If any fail, follow the printed fix hints.
@@ -98,17 +98,17 @@ All checks should show `[✓]`. If any fail, follow the printed fix hints.
 
 ## Part 3: Client Setup
 
-### 3.1 Install GPU Directer client
+### 3.1 Install GPU Access Router client
 
 On your laptop or cloud machine:
 ```bash
-pip install "git+https://github.com/your-account/GPU-Directer-toolkit.git[client]"
+pip install "git+https://github.com/your-account/GPU-Access-Router-toolkit.git[client]"
 ```
 
 ### 3.2 Run the setup wizard
 
 ```bash
-gpu-directer client setup
+gpu-access-router client setup
 ```
 
 When prompted, enter the GPU server's Tailscale IP (from step 1.4).
@@ -118,12 +118,12 @@ The wizard will:
 - Test connectivity to the server
 - List all available models on the server
 - Ask your preferred routing mode (press Enter for `auto`)
-- Save configuration to `~/.gpu-directer/config.toml`
+- Save configuration to `~/.gpu-access-router/config.toml`
 
 ### 3.3 Verify client status
 
 ```bash
-gpu-directer client status
+gpu-access-router client status
 ```
 
 You should see the server listed as `● online` with available models.
@@ -136,13 +136,13 @@ You should see the server listed as `● online` with available models.
 
 ```bash
 # In your project's virtual environment
-pip install "git+https://github.com/your-account/GPU-Directer-toolkit.git[client]"
+pip install "git+https://github.com/your-account/GPU-Access-Router-toolkit.git[client]"
 ```
 
 ### 4.2 Basic usage
 
 ```python
-from gpu_directer import GPURouter
+from gpu_access_router import GPURouter
 
 router = GPURouter()
 
@@ -186,41 +186,41 @@ print("Queue depth:", status["remote"]["queue_depth"])
 
 ```bash
 # Use remote only
-gpu-directer config set client.routing_mode=remote
+gpu-access-router config set client.routing_mode=remote
 
 # Use local only
-gpu-directer config set client.routing_mode=local
+gpu-access-router config set client.routing_mode=local
 
 # Auto (default)
-gpu-directer config set client.routing_mode=auto
+gpu-access-router config set client.routing_mode=auto
 ```
 
 ### Update server IP (after Tailscale IP changes)
 
 ```bash
-gpu-directer config set client.server_ip=100.64.0.99
+gpu-access-router config set client.server_ip=100.64.0.99
 ```
 
 ### Change queue timeout
 
 ```bash
 # On client: how long to wait in server queue
-gpu-directer config set client.timeout_seconds=600
+gpu-access-router config set client.timeout_seconds=600
 
 # On server: how long before dropping a queued request
-gpu-directer config set server.queue_timeout=600
+gpu-access-router config set server.queue_timeout=600
 ```
 
 ### View all current configuration
 
 ```bash
-gpu-directer config show
+gpu-access-router config show
 ```
 
 ### Edit config file directly
 
 ```bash
-gpu-directer config edit   # Opens ~/.gpu-directer/config.toml in $EDITOR
+gpu-access-router config edit   # Opens ~/.gpu-access-router/config.toml in $EDITOR
 ```
 
 ---
@@ -234,17 +234,17 @@ gpu-directer config edit   # Opens ~/.gpu-directer/config.toml in $EDITOR
 tailscale status
 
 # Check server health
-gpu-directer server doctor   # run on server
+gpu-access-router server doctor   # run on server
 
 # Check client connectivity
-gpu-directer client status   # run on client
+gpu-access-router client status   # run on client
 ```
 
 ### GPU not detected by Ollama
 
 ```bash
 # On server:
-gpu-directer server doctor   # Look for [✗] GPU passthrough
+gpu-access-router server doctor   # Look for [✗] GPU passthrough
 docker exec ollama nvidia-smi   # Should show your GPU
 ```
 
@@ -258,10 +258,10 @@ sudo systemctl restart docker
 
 ```bash
 # Check current queue
-gpu-directer client status   # Shows queue depth
+gpu-access-router client status   # Shows queue depth
 
 # Increase timeout if requests are slow
-gpu-directer config set client.timeout_seconds=600
+gpu-access-router config set client.timeout_seconds=600
 ```
 
 ### Model not found warning
@@ -278,27 +278,27 @@ docker exec ollama ollama pull <model-name>
 
 ```bash
 # Server commands
-gpu-directer server setup        # Initial setup wizard
-gpu-directer server doctor       # Health check (all components)
-gpu-directer server models       # List available models
-gpu-directer server start        # Start Ollama container
-gpu-directer server stop         # Stop Ollama container
-gpu-directer server restart      # Restart Ollama container
+gpu-access-router server setup        # Initial setup wizard
+gpu-access-router server doctor       # Health check (all components)
+gpu-access-router server models       # List available models
+gpu-access-router server start        # Start Ollama container
+gpu-access-router server stop         # Stop Ollama container
+gpu-access-router server restart      # Restart Ollama container
 
 # Client commands
-gpu-directer client setup        # Connect to server wizard
-gpu-directer client status       # Show server + local status
-gpu-directer client models       # List models (remote/local/all)
+gpu-access-router client setup        # Connect to server wizard
+gpu-access-router client status       # Show server + local status
+gpu-access-router client models       # List models (remote/local/all)
 
 # Config commands
-gpu-directer config show         # Display all settings
-gpu-directer config set k=v      # Update one setting
-gpu-directer config edit         # Open config in $EDITOR
-gpu-directer config reset        # Reset to defaults
+gpu-access-router config show         # Display all settings
+gpu-access-router config set k=v      # Update one setting
+gpu-access-router config edit         # Open config in $EDITOR
+gpu-access-router config reset        # Reset to defaults
 
 # Global
-gpu-directer --version           # Package version
-gpu-directer --help              # Help
-gpu-directer <command> --json    # Machine-readable output
-gpu-directer <command> --quiet   # Suppress info output
+gpu-access-router --version           # Package version
+gpu-access-router --help              # Help
+gpu-access-router <command> --json    # Machine-readable output
+gpu-access-router <command> --quiet   # Suppress info output
 ```

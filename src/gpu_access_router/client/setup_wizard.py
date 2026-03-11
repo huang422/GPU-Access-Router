@@ -5,7 +5,7 @@ from typing import Optional
 
 from rich.console import Console
 
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -28,14 +28,14 @@ def run_client_setup(
     config_path: Optional[str] = None,
 ) -> None:
     """Execute client setup wizard."""
-    from gpu_directer.client.connectivity import (
+    from gpu_access_router.client.connectivity import (
         check_tailscale_connected,
         check_tailscale_installed,
         probe_server,
         query_server_models,
     )
 
-    console.print("\n[bold]GPU Directer — Client Setup Wizard[/bold]\n")
+    console.print("\n[bold]GPU Access Router — Client Setup Wizard[/bold]\n")
 
     # Step 1: Check Tailscale installed
     console.print("[bold cyan]Step 1/8:[/bold cyan] Checking Tailscale installation…")
@@ -112,7 +112,7 @@ def run_client_setup(
 
     # Step 7: Write config
     console.print("[bold cyan]Step 7/8:[/bold cyan] Saving configuration…")
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(config_path)
     cfg.setdefault("client", {})
     cfg["client"]["server_ip"] = server_ip
@@ -127,11 +127,11 @@ def run_client_setup(
     console.print("[bold cyan]Step 8/8:[/bold cyan] Done!\n")
     console.print("[bold green]✓ Client setup complete![/bold green]\n")
     console.print("Quick start:")
-    console.print("  [bold]from gpu_directer import GPURouter[/bold]")
+    console.print("  [bold]from gpu_access_router import GPURouter[/bold]")
     console.print("  [bold]router = GPURouter()[/bold]")
     console.print('  [bold]response = router.chat("llama3.2", [{"role": "user", "content": "Hello!"}])[/bold]')
     console.print("  [bold]print(response.message.content)[/bold]")
-    console.print("\nCheck status: [bold]gpu-directer client status[/bold]")
+    console.print("\nCheck status: [bold]gpu-access-router client status[/bold]")
 
 
 def _confirm(prompt: str) -> bool:

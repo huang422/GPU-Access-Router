@@ -7,7 +7,7 @@ import urllib.error
 import urllib.request
 from typing import Dict, List, Optional
 
-from gpu_directer.core.constants import DEFAULT_PORT
+from gpu_access_router.core.constants import DEFAULT_PORT
 
 
 def check_tailscale_installed() -> bool:

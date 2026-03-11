@@ -1,4 +1,4 @@
-# Research: GPU Directer Toolkit
+# Research: GPU Access Router Toolkit
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11
 **Phase**: 0 — Pre-design research for all NEEDS CLARIFICATION items
@@ -29,22 +29,22 @@
 
 **Decision**: `pyproject.toml` + src-layout + Click CLI + lazy role imports
 
-**Rationale**: Modern pyproject.toml packaging (setuptools backend) with `[project.optional-dependencies]` for `server`, `client`, `all` extras. src-layout (`src/gpu_directer/`) prevents accidental import of local dev code and is 2025 best practice. Click chosen over Typer (more mature, no extra deps) and argparse (too verbose for nested sub-commands). Role-specific code loaded lazily inside Click command handlers so a client-only install never imports server dependencies.
+**Rationale**: Modern pyproject.toml packaging (setuptools backend) with `[project.optional-dependencies]` for `server`, `client`, `all` extras. src-layout (`src/gpu_access_router/`) prevents accidental import of local dev code and is 2025 best practice. Click chosen over Typer (more mature, no extra deps) and argparse (too verbose for nested sub-commands). Role-specific code loaded lazily inside Click command handlers so a client-only install never imports server dependencies.
 
 **pyproject.toml key sections**:
 ```toml
 [project]
-name = "gpu-directer"
+name = "gpu-access-router"
 requires-python = ">=3.8"
 dependencies = ["click>=8.0", "tomli>=2.0; python_version<'3.11'", "tomli-w>=1.0"]
 
 [project.optional-dependencies]
 server = ["fastapi>=0.100", "uvicorn[standard]>=0.23", "ollama>=0.1", "rich>=13.0"]
 client = ["ollama>=0.1", "rich>=13.0"]
-all    = ["gpu-directer[server,client]"]
+all    = ["gpu-access-router[server,client]"]
 
 [project.scripts]
-gpu-directer = "gpu_directer.cli:main"
+gpu-access-router = "gpu_access_router.cli:main"
 ```
 
 **Alternatives considered**:
@@ -127,7 +127,7 @@ except ImportError:
 import tomli_w              # pip install tomli-w (read only stdlib has no write)
 ```
 
-**Config file location**: `~/.gpu-directer/config.toml` (both roles share same file location, different `[server]`/`[client]` sections)
+**Config file location**: `~/.gpu-access-router/config.toml` (both roles share same file location, different `[server]`/`[client]` sections)
 
 **Alternatives considered**:
 - `tomlkit` — rejected: preserves formatting nicely but adds complexity; user-edited comments are not a priority for v1; can migrate later
@@ -145,7 +145,7 @@ import tomli_w              # pip install tomli-w (read only stdlib has no write
 | Per-request timeout | asyncio.wait_for() | stdlib asyncio |
 | Ollama integration | Ollama Python SDK | `ollama` |
 | CLI framework | Click nested groups | `click>=8.0` |
-| Config format | TOML at ~/.gpu-directer/config.toml | `tomli`/`tomllib` + `tomli-w` |
+| Config format | TOML at ~/.gpu-access-router/config.toml | `tomli`/`tomllib` + `tomli-w` |
 | Tailscale detection | subprocess + tailscale CLI | stdlib subprocess + socket |
 | Output formatting | Rich tables/colors | `rich>=13.0` |
 | Testing | pytest + pytest-asyncio | `pytest`, `pytest-asyncio` |

@@ -1,16 +1,16 @@
 # Contract: CLI Command Schema
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11
-**Entrypoint**: `gpu-directer` (installed via `pip install gpu-directer[...]`)
+**Entrypoint**: `gpu-access-router` (installed via `pip install gpu-access-router[...]`)
 
-This document defines the complete command surface for the `gpu-directer` CLI. All commands follow the pattern: `gpu-directer <role> <command> [options]`. Output is human-readable by default; `--json` flag available on all commands for machine-readable output.
+This document defines the complete command surface for the `gpu-access-router` CLI. All commands follow the pattern: `gpu-access-router <role> <command> [options]`. Output is human-readable by default; `--json` flag available on all commands for machine-readable output.
 
 ---
 
 ## Top-level
 
 ```
-gpu-directer [--version] [--help]
+gpu-access-router [--version] [--help]
 ```
 
 | Flag | Description |
@@ -20,16 +20,16 @@ gpu-directer [--version] [--help]
 
 ---
 
-## `gpu-directer server` group
+## `gpu-access-router server` group
 
 Commands for the GPU server machine (requires `[server]` extra installed).
 
-### `gpu-directer server setup`
+### `gpu-access-router server setup`
 
 Interactive wizard to configure the GPU server from scratch.
 
 ```
-gpu-directer server setup [--non-interactive] [--port PORT]
+gpu-access-router server setup [--non-interactive] [--port PORT]
 ```
 
 | Option | Default | Description |
@@ -45,19 +45,19 @@ gpu-directer server setup [--non-interactive] [--port PORT]
 5. Install Tailscale if not present
 6. Prompt user to authenticate Tailscale (`tailscale up`)
 7. Display Tailscale IP for user to share with clients
-8. Write `[server]` section to `~/.gpu-directer/config.toml`
+8. Write `[server]` section to `~/.gpu-access-router/config.toml`
 9. Print summary and next steps
 
 **Exit codes**: `0` success, `1` prerequisite missing, `2` Docker/Tailscale error
 
 ---
 
-### `gpu-directer server doctor`
+### `gpu-access-router server doctor`
 
 Extended diagnostic check of all server components.
 
 ```
-gpu-directer server doctor [--json]
+gpu-access-router server doctor [--json]
 ```
 
 | Check | What it verifies |
@@ -86,12 +86,12 @@ Overall: FAIL (1 check failed)
 
 ---
 
-### `gpu-directer server models`
+### `gpu-access-router server models`
 
 List all Ollama models available on the server.
 
 ```
-gpu-directer server models [--json]
+gpu-access-router server models [--json]
 ```
 
 **Output (human-readable)**:
@@ -104,30 +104,30 @@ Available models on this server:
 
 ---
 
-### `gpu-directer server start` / `stop` / `restart`
+### `gpu-access-router server start` / `stop` / `restart`
 
 Manage the Ollama Docker container lifecycle.
 
 ```
-gpu-directer server start
-gpu-directer server stop
-gpu-directer server restart
+gpu-access-router server start
+gpu-access-router server stop
+gpu-access-router server restart
 ```
 
 Each command runs the corresponding `docker start|stop|restart ollama` and reports success/failure.
 
 ---
 
-## `gpu-directer client` group
+## `gpu-access-router client` group
 
 Commands for the client machine (requires `[client]` extra installed).
 
-### `gpu-directer client setup`
+### `gpu-access-router client setup`
 
 Interactive wizard to connect a client to the GPU server.
 
 ```
-gpu-directer client setup [--server-ip IP] [--port PORT] [--non-interactive]
+gpu-access-router client setup [--server-ip IP] [--port PORT] [--non-interactive]
 ```
 
 | Option | Default | Description |
@@ -143,24 +143,24 @@ gpu-directer client setup [--server-ip IP] [--port PORT] [--non-interactive]
 4. TCP probe to `server_ip:port` (5s timeout)
 5. Query `/api/tags` on server → list available models
 6. Prompt for default routing mode (`auto` / `remote` / `local`)
-7. Write `[client]` section to `~/.gpu-directer/config.toml`
+7. Write `[client]` section to `~/.gpu-access-router/config.toml`
 8. Print summary and quickstart code example
 
 **Exit codes**: `0` success, `1` Tailscale not installed/connected, `2` server unreachable
 
 ---
 
-### `gpu-directer client status`
+### `gpu-access-router client status`
 
 Show current connection status between client and configured server.
 
 ```
-gpu-directer client status [--json]
+gpu-access-router client status [--json]
 ```
 
 **Output (human-readable)**:
 ```
-GPU Directer Client Status
+GPU Access Router Client Status
   Server IP:      100.64.0.5:11434
   Server status:  ● online
   Queue depth:    2 requests waiting
@@ -175,12 +175,12 @@ GPU Directer Client Status
 
 ---
 
-### `gpu-directer client models`
+### `gpu-access-router client models`
 
 List models available on the remote server and/or local Ollama.
 
 ```
-gpu-directer client models [--source remote|local|all] [--json]
+gpu-access-router client models [--source remote|local|all] [--json]
 ```
 
 | Option | Default | Description |
@@ -189,60 +189,60 @@ gpu-directer client models [--source remote|local|all] [--json]
 
 ---
 
-## `gpu-directer config` group
+## `gpu-access-router config` group
 
 Configuration management (available on all machines).
 
-### `gpu-directer config show`
+### `gpu-access-router config show`
 
 Print current configuration.
 
 ```
-gpu-directer config show [--json]
+gpu-access-router config show [--json]
 ```
 
 **Output**: All `config.toml` sections printed as readable key-value pairs. Sensitive values (IPs) shown in full.
 
 ---
 
-### `gpu-directer config set`
+### `gpu-access-router config set`
 
 Update a single configuration value.
 
 ```
-gpu-directer config set <key>=<value>
+gpu-access-router config set <key>=<value>
 ```
 
 **Examples**:
 ```bash
-gpu-directer config set client.server_ip=100.64.0.5
-gpu-directer config set client.routing_mode=local
-gpu-directer config set client.timeout_seconds=600
-gpu-directer config set server.queue_timeout=120
+gpu-access-router config set client.server_ip=100.64.0.5
+gpu-access-router config set client.routing_mode=local
+gpu-access-router config set client.timeout_seconds=600
+gpu-access-router config set server.queue_timeout=120
 ```
 
 **Validation**: Key must exist in schema; value must pass type validation. Prints error on invalid key or value.
 
 ---
 
-### `gpu-directer config edit`
+### `gpu-access-router config edit`
 
 Open config file in `$EDITOR` (falls back to `nano` if unset).
 
 ```
-gpu-directer config edit
+gpu-access-router config edit
 ```
 
-Opens `~/.gpu-directer/config.toml` directly. No validation is performed after edit (user is responsible).
+Opens `~/.gpu-access-router/config.toml` directly. No validation is performed after edit (user is responsible).
 
 ---
 
-### `gpu-directer config reset`
+### `gpu-access-router config reset`
 
 Reset configuration to defaults (prompts for confirmation).
 
 ```
-gpu-directer config reset [--yes]
+gpu-access-router config reset [--yes]
 ```
 
 | Option | Description |
@@ -259,7 +259,7 @@ Available on all commands:
 |---|---|
 | `--json` | Output as JSON instead of human-readable text |
 | `--quiet` | Suppress informational output; only print errors |
-| `--config PATH` | Use a custom config file path instead of `~/.gpu-directer/config.toml` |
+| `--config PATH` | Use a custom config file path instead of `~/.gpu-access-router/config.toml` |
 
 ---
 

@@ -2,13 +2,13 @@
 
 from typing import Any, Dict, Optional
 
-from gpu_directer.core.constants import DEFAULT_API_PORT
+from gpu_access_router.core.constants import DEFAULT_API_PORT
 
 
 def get_client_status(config_path: Optional[str] = None) -> Dict[str, Any]:
     """Query remote server health, remote models, and local Ollama."""
-    from gpu_directer import config as cfg_mod
-    from gpu_directer.client.connectivity import (
+    from gpu_access_router import config as cfg_mod
+    from gpu_access_router.client.connectivity import (
         probe_server,
         query_local_models,
         query_server_health,

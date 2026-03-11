@@ -1,4 +1,4 @@
-# Data Model: GPU Directer Toolkit
+# Data Model: GPU Access Router Toolkit
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11
 **Source**: spec.md entities + research.md technology decisions
@@ -7,7 +7,7 @@
 
 ## Entities
 
-### 1. Configuration (TOML file: `~/.gpu-directer/config.toml`)
+### 1. Configuration (TOML file: `~/.gpu-access-router/config.toml`)
 
 The on-disk representation of all user-configurable settings. Both roles (server and client) use the same file path but different top-level sections. Written by setup wizards; read by all runtime components.
 
@@ -68,7 +68,7 @@ The primary developer-facing object. Instantiated once per project, called for e
 3. If model found on remote: route to remote, return response
 4. If model NOT found on remote but exists locally: fall back to local, emit warning
 5. If remote unreachable: fall back to local silently
-6. If local also unavailable: raise `GPUDirecterError` with details of what was tried
+6. If local also unavailable: raise `GPUAccessRouterError` with details of what was tried
 
 ---
 
@@ -130,7 +130,7 @@ The in-memory serial queue managing all inference requests on the server. One in
 
 ### 5. DiagnosticReport (server-side, generated on demand)
 
-Produced by `gpu-directer server doctor`. Represents the result of all extended health checks.
+Produced by `gpu-access-router server doctor`. Represents the result of all extended health checks.
 
 **Structure**:
 ```python

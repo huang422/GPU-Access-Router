@@ -1,4 +1,4 @@
-# Implementation Plan: GPU Directer Toolkit
+# Implementation Plan: GPU Access Router Toolkit
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/001-gpu-router-toolkit/spec.md`
@@ -7,7 +7,7 @@
 
 ## Summary
 
-GPU Directer is a two-role pip-installable Python toolkit that routes LLM inference calls to a remote GPU server (gpu-server running Ollama in Docker over Tailscale) or falls back to local Ollama automatically. The server role runs a FastAPI app with an asyncio serial queue (one inference at a time) to prevent GPU OOM. The client role provides a `GPURouter` Python class and a `gpu-directer` Click CLI. Configuration is stored in `~/.gpu-directer/config.toml` (TOML format, editable directly or via CLI). Both roles are installable from GitHub via `pip install git+https://...[server|client|all]`.
+GPU Access Router is a two-role pip-installable Python toolkit that routes LLM inference calls to a remote GPU server (gpu-server running Ollama in Docker over Tailscale) or falls back to local Ollama automatically. The server role runs a FastAPI app with an asyncio serial queue (one inference at a time) to prevent GPU OOM. The client role provides a `GPURouter` Python class and a `gpu-access-router` Click CLI. Configuration is stored in `~/.gpu-access-router/config.toml` (TOML format, editable directly or via CLI). Both roles are installable from GitHub via `pip install git+https://...[server|client|all]`.
 
 ---
 
@@ -19,7 +19,7 @@ GPU Directer is a two-role pip-installable Python toolkit that routes LLM infere
 - Server extras: `fastapi>=0.100`, `uvicorn[standard]>=0.23`, `ollama>=0.1`
 - Client extras: `ollama>=0.1`
 
-**Storage**: `~/.gpu-directer/config.toml` — flat TOML file, ~1 KB, no database
+**Storage**: `~/.gpu-access-router/config.toml` — flat TOML file, ~1 KB, no database
 
 **Testing**: `pytest` + `pytest-asyncio` (for async queue tests)
 
@@ -73,14 +73,14 @@ specs/001-gpu-router-toolkit/
 
 ```text
 src/
-└── gpu_directer/
+└── gpu_access_router/
     ├── __init__.py              # Public exports: GPURouter, exceptions
-    ├── __main__.py              # python -m gpu_directer support
+    ├── __main__.py              # python -m gpu_access_router support
     ├── cli.py                   # Click entry point (all sub-command groups)
     ├── config.py                # TOML config read/write + validation
     ├── core/
     │   ├── __init__.py
-    │   ├── exceptions.py        # GPUDirecterError, ConnectionError, TimeoutError, ConfigError
+    │   ├── exceptions.py        # GPUAccessRouterError, ConnectionError, TimeoutError, ConfigError
     │   └── constants.py         # Default port, timeout, config path, etc.
     ├── server/
     │   ├── __init__.py          # Lazy import guard (requires [server] extra)
@@ -119,7 +119,7 @@ No constitution violations to justify.
 
 ### Phase 1: Foundation (core + config + packaging skeleton)
 
-**Deliverables**: `pyproject.toml`, `core/exceptions.py`, `core/constants.py`, `config.py`, basic `cli.py` skeleton with all command groups registered (no implementations), `gpu-directer --help` works after install.
+**Deliverables**: `pyproject.toml`, `core/exceptions.py`, `core/constants.py`, `config.py`, basic `cli.py` skeleton with all command groups registered (no implementations), `gpu-access-router --help` works after install.
 
 **Why first**: Everything else depends on config reading and the CLI skeleton. No role-specific deps needed yet.
 
@@ -135,31 +135,31 @@ No constitution violations to justify.
 
 ### Phase 3: Server — Setup Wizard + Doctor
 
-**Deliverables**: `server/setup_wizard.py` (checks Docker → NVIDIA drivers → pull ollama/ollama → start container with `--gpus all -e OLLAMA_HOST=0.0.0.0` → install Tailscale → print IP), `server/doctor.py` (6 checks: Docker, container running, GPU passthrough, Tailscale, models available, queue status), `gpu-directer server setup` and `gpu-directer server doctor` CLI commands wired up.
+**Deliverables**: `server/setup_wizard.py` (checks Docker → NVIDIA drivers → pull ollama/ollama → start container with `--gpus all -e OLLAMA_HOST=0.0.0.0` → install Tailscale → print IP), `server/doctor.py` (6 checks: Docker, container running, GPU passthrough, Tailscale, models available, queue status), `gpu-access-router server setup` and `gpu-access-router server doctor` CLI commands wired up.
 
 ---
 
 ### Phase 4: Client — GPURouter
 
-**Deliverables**: `client/router.py` (GPURouter with auto/remote/local routing, fallback logic, model-missing warning, submit-then-poll pattern for `/gd/chat`), unit tests for all routing cases (remote up, remote down, model missing, both down), `from gpu_directer import GPURouter` works.
+**Deliverables**: `client/router.py` (GPURouter with auto/remote/local routing, fallback logic, model-missing warning, submit-then-poll pattern for `/gd/chat`), unit tests for all routing cases (remote up, remote down, model missing, both down), `from gpu_access_router import GPURouter` works.
 
 ---
 
 ### Phase 5: Client — Setup Wizard + Status
 
-**Deliverables**: `client/setup_wizard.py` (Tailscale check → TCP probe → `/gd/models` query → mode prompt → write config), `client/status.py` (display server online/offline, queue depth, models, local Ollama status), `gpu-directer client setup` and `gpu-directer client status` CLI commands wired up.
+**Deliverables**: `client/setup_wizard.py` (Tailscale check → TCP probe → `/gd/models` query → mode prompt → write config), `client/status.py` (display server online/offline, queue depth, models, local Ollama status), `gpu-access-router client setup` and `gpu-access-router client status` CLI commands wired up.
 
 ---
 
 ### Phase 6: Config CLI Commands
 
-**Deliverables**: `gpu-directer config show` (pretty-print config.toml), `gpu-directer config set k=v` (validate key + type, write), `gpu-directer config edit` (open in $EDITOR), `gpu-directer config reset` (confirm + overwrite defaults).
+**Deliverables**: `gpu-access-router config show` (pretty-print config.toml), `gpu-access-router config set k=v` (validate key + type, write), `gpu-access-router config edit` (open in $EDITOR), `gpu-access-router config reset` (confirm + overwrite defaults).
 
 ---
 
 ### Phase 7: Polish + Documentation
 
-**Deliverables**: README with Tailscale setup guide, server quick-start, client quick-start, `GPURouter` code example, complete command reference. Integration tests. `--json` flag on all commands. `--quiet` flag. `gpu-directer --version`.
+**Deliverables**: README with Tailscale setup guide, server quick-start, client quick-start, `GPURouter` code example, complete command reference. Integration tests. `--json` flag on all commands. `--quiet` flag. `gpu-access-router --version`.
 
 ---
 

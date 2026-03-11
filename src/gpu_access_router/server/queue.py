@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-from gpu_directer.core.constants import DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
+from gpu_access_router.core.constants import DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 
 
 @dataclass

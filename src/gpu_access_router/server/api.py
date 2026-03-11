@@ -2,32 +2,29 @@
 
 import asyncio
 import json
-import time
-import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 try:
     from fastapi import FastAPI, HTTPException
-    from fastapi.responses import JSONResponse
     import uvicorn
     from pydantic import BaseModel
 except ImportError as exc:
     raise ImportError(
-        "Server dependencies not installed. Install with: pip install gpu-directer[server]"
+        "Server dependencies not installed. Install with: pip install gpu-access-router[server]"
     ) from exc
 
 try:
     import ollama as _ollama
 except ImportError as exc:
     raise ImportError(
-        "Server dependencies not installed. Install with: pip install gpu-directer[server]"
+        "Server dependencies not installed. Install with: pip install gpu-access-router[server]"
     ) from exc
 
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
-from gpu_directer.server.queue import SerialQueue
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
+from gpu_access_router.server.queue import SerialQueue
 
-app = FastAPI(title="GPU Directer Server", version="0.1.0")
+app = FastAPI(title="GPU Access Router Server", version="0.1.0")
 
 _serial_queue: Optional[SerialQueue] = None
 _ollama_port: int = DEFAULT_PORT
@@ -51,7 +48,7 @@ class ChatRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     global _serial_queue, _ollama_port
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config()
     _ollama_port = cfg.get("server", {}).get("ollama_port", DEFAULT_PORT)
     queue_timeout = cfg.get("server", {}).get("queue_timeout", DEFAULT_TIMEOUT)
@@ -129,7 +126,7 @@ async def submit_chat(req: ChatRequest):
     if max_depth > 0 and depth >= max_depth:
         raise HTTPException(
             status_code=503,
-            detail=f"Queue full ({depth}/{max_depth}). Try again later or run 'gpu-directer server restart'.",
+            detail=f"Queue full ({depth}/{max_depth}). Try again later or run 'gpu-access-router server restart'.",
         )
 
     inference_req = await _serial_queue.enqueue({
@@ -201,4 +198,4 @@ def _check_ollama_reachable(port: int) -> bool:
 
 
 def run_server(host: str = "0.0.0.0", port: int = DEFAULT_API_PORT, reload: bool = False):
-    uvicorn.run("gpu_directer.server.api:app", host=host, port=port, reload=reload)
+    uvicorn.run("gpu_access_router.server.api:app", host=host, port=port, reload=reload)

@@ -7,12 +7,11 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from typing import Optional
 
 from rich.console import Console
 
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -40,7 +39,7 @@ def run_server_setup(
 ) -> None:
     """Execute 9-step server setup wizard."""
     total = 9
-    console.print("\n[bold]GPU Directer — Server Setup Wizard[/bold]\n")
+    console.print("\n[bold]GPU Access Router — Server Setup Wizard[/bold]\n")
 
     # Step 1: Check Docker
     _step(1, total, "Checking Docker installation…")
@@ -147,7 +146,7 @@ def run_server_setup(
 
     # Step 9: Write config
     _step(9, total, "Writing server configuration…")
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(config_path)
     cfg.setdefault("server", {})
     cfg["server"]["ollama_port"] = port
@@ -159,7 +158,7 @@ def run_server_setup(
     _ok("Configuration saved.")
 
     # Auto-start API server in background
-    _step(9, total, "Starting GPU Directer API server in background…")  # reuse step 9 label
+    _step(9, total, "Starting GPU Access Router API server in background…")  # reuse step 9 label
     _start_api_server_bg(api_port)
 
     console.print("\n[bold green]✓ Server setup complete![/bold green]")
@@ -168,12 +167,12 @@ def run_server_setup(
         console.print("Share this IP with your clients so they can connect.")
     console.print("\nNext steps:")
     console.print("  1. Pull a model: [bold]ollama pull llama3.2[/bold]")
-    console.print("  2. Verify setup: [bold]gpu-directer server doctor[/bold]")
-    console.print(f"  3. On each client: [bold]gpu-directer client setup --server-ip {tailscale_ip or '<IP>'} --port {api_port}[/bold]")
+    console.print("  2. Verify setup: [bold]gpu-access-router server doctor[/bold]")
+    console.print(f"  3. On each client: [bold]gpu-access-router client setup --server-ip {tailscale_ip or '<IP>'} --port {api_port}[/bold]")
     console.print("\nManage the API server:")
-    console.print("  gpu-directer server start    # start in background")
-    console.print("  gpu-directer server stop     # stop")
-    console.print("  gpu-directer server restart  # restart")
+    console.print("  gpu-access-router server start    # start in background")
+    console.print("  gpu-access-router server stop     # stop")
+    console.print("  gpu-access-router server restart  # restart")
 
 
 def _wait_for_ollama(port: int, timeout: int = 60) -> bool:
@@ -206,7 +205,7 @@ def _get_tailscale_ip() -> Optional[str]:
 
 
 def _start_api_server_bg(api_port: int) -> None:
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router.core.constants import CONFIG_PATH
     pid_path = CONFIG_PATH.parent / "server.pid"
     log_path = CONFIG_PATH.parent / "server.log"
 
@@ -223,7 +222,7 @@ def _start_api_server_bg(api_port: int) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as log:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "gpu_directer", "server", "serve", "--port", str(api_port)],
+            [sys.executable, "-m", "gpu_access_router", "server", "serve", "--port", str(api_port)],
             stdout=log, stderr=log,
             start_new_session=True,
         )

@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gpu-directer"
+name = "gpu-access-router"
 version = "0.1.0"
 description = "Route LLM inference to a remote GPU server or fall back to local Ollama automatically"
 readme = "README.md"
@@ -37,12 +37,12 @@ client = [
     "ollama>=0.1",
 ]
 all = [
-    "gpu-directer[server,client]",
+    "gpu-access-router[server,client]",
 ]
 
 [project.scripts]
-gpu-directer = "gpu_directer.cli:main"
-ollama = "gpu_directer.shim.ollama_shim:main"
+gpu-access-router = "gpu_access_router.cli:main"
+ollama = "gpu_access_router.shim.ollama_shim:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

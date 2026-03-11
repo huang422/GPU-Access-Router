@@ -1,17 +1,17 @@
-"""GPU Directer CLI — entry point for all sub-commands."""
+"""GPU Access Router CLI — entry point for all sub-commands."""
 
 import json
 import os
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
 
-import gpu_directer
-from gpu_directer import __version__
-from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
+from gpu_access_router import __version__
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT
 
 console = Console()
 err_console = Console(stderr=True)
@@ -37,16 +37,16 @@ pass_ctx = click.make_pass_decorator(_Ctx, ensure=True)
 # ---------------------------------------------------------------------------
 
 @click.group()
-@click.version_option(__version__, prog_name="gpu-directer")
+@click.version_option(__version__, prog_name="gpu-access-router")
 @click.option("--config", "config_path", default=None, metavar="PATH",
-              help="Path to config.toml (default: ~/.gpu-directer/config.toml).")
+              help="Path to config.toml (default: ~/.gpu-access-router/config.toml).")
 @click.option("--json", "json_output", is_flag=True, default=False,
               help="Output as JSON instead of human-readable text.")
 @click.option("--quiet", is_flag=True, default=False,
               help="Suppress informational output; only print errors.")
 @click.pass_context
 def main(ctx, config_path, json_output, quiet):
-    """GPU Directer — route LLM inference to a remote GPU server or local Ollama."""
+    """GPU Access Router — route LLM inference to a remote GPU server or local Ollama."""
     ctx.ensure_object(dict)
     ctx.obj = _Ctx(config_path=config_path, json_output=json_output, quiet=quiet)
 
@@ -69,11 +69,11 @@ def server(ctx, json_output, quiet):
 
 
 def _require_server_deps():
-    from gpu_directer.server import HAVE_SERVER
+    from gpu_access_router.server import HAVE_SERVER
     if not HAVE_SERVER:
         err_console.print(
             "[red]Server dependencies not installed. Install with:[/red]\n"
-            "  pip install gpu-directer[server]"
+            "  pip install gpu-access-router[server]"
         )
         sys.exit(1)
 
@@ -81,12 +81,12 @@ def _require_server_deps():
 @server.command("setup")
 @click.option("--non-interactive", is_flag=True, default=False)
 @click.option("--port", default=DEFAULT_PORT, type=int, show_default=True, help="Ollama port.")
-@click.option("--api-port", default=DEFAULT_API_PORT, type=int, show_default=True, help="GPU Directer API port.")
+@click.option("--api-port", default=DEFAULT_API_PORT, type=int, show_default=True, help="GPU Access Router API port.")
 @click.pass_context
 def server_setup(ctx, non_interactive, port, api_port):
     """Interactive wizard to configure the GPU server from scratch."""
     _require_server_deps()
-    from gpu_directer.server.setup_wizard import run_server_setup
+    from gpu_access_router.server.setup_wizard import run_server_setup
     run_server_setup(port=port, api_port=api_port, non_interactive=non_interactive, config_path=ctx.obj.config_path)
 
 
@@ -96,8 +96,8 @@ def server_setup(ctx, non_interactive, port, api_port):
 def server_doctor(ctx, json_flag):
     """Extended diagnostic check of all server components."""
     _require_server_deps()
-    from gpu_directer.server.doctor import run_doctor
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router.server.doctor import run_doctor
+    from gpu_access_router import config as cfg_mod
     _cfg = cfg_mod.load_config(ctx.obj.config_path)
     _ollama_port = _cfg.get("server", {}).get("ollama_port", DEFAULT_PORT)
     _api_port = _cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
@@ -136,7 +136,7 @@ def server_models(ctx, json_flag):
     import urllib.request
     import urllib.error
     obj: _Ctx = ctx.obj
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     config = cfg_mod.load_config(obj.config_path)
     port = config.get("server", {}).get("api_port", DEFAULT_API_PORT)
     url = f"http://localhost:{port}/gd/models"
@@ -163,9 +163,9 @@ def server_models(ctx, json_flag):
 @server.command("start")
 @click.pass_context
 def server_start(ctx):
-    """Start the GPU Directer API server in the background."""
+    """Start the GPU Access Router API server in the background."""
     _require_server_deps()
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(ctx.obj.config_path)
     api_port = cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
     _start_api_server(api_port)
@@ -173,17 +173,17 @@ def server_start(ctx):
 
 @server.command("stop")
 def server_stop():
-    """Stop the GPU Directer API server."""
+    """Stop the GPU Access Router API server."""
     _stop_api_server()
 
 
 @server.command("restart")
 @click.pass_context
 def server_restart(ctx):
-    """Restart the GPU Directer API server."""
+    """Restart the GPU Access Router API server."""
     _stop_api_server()
     _require_server_deps()
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(ctx.obj.config_path)
     api_port = cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
     _start_api_server(api_port)
@@ -194,20 +194,20 @@ def server_restart(ctx):
 @click.option("--port", default=DEFAULT_API_PORT, type=int, show_default=True)
 @click.option("--reload", is_flag=True, default=False, help="Auto-reload on code changes (dev only).")
 def server_serve(host, port, reload):
-    """Start the GPU Directer FastAPI server in the foreground (dev mode)."""
+    """Start the GPU Access Router FastAPI server in the foreground (dev mode)."""
     _require_server_deps()
-    from gpu_directer.server.api import run_server
-    console.print(f"[bold]Starting GPU Directer API server on {host}:{port}…[/bold]")
+    from gpu_access_router.server.api import run_server
+    console.print(f"[bold]Starting GPU Access Router API server on {host}:{port}…[/bold]")
     run_server(host=host, port=port, reload=reload)
 
 
 def _pid_file() -> "Path":
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router.core.constants import CONFIG_PATH
     return CONFIG_PATH.parent / "server.pid"
 
 
 def _log_file() -> "Path":
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router.core.constants import CONFIG_PATH
     return CONFIG_PATH.parent / "server.log"
 
 
@@ -220,7 +220,7 @@ def _start_api_server(api_port: int) -> None:
         try:
             pid = int(pid_path.read_text().strip())
             os.kill(pid, 0)
-            console.print(f"[yellow]GPU Directer server already running (PID {pid}, port {api_port}).[/yellow]")
+            console.print(f"[yellow]GPU Access Router server already running (PID {pid}, port {api_port}).[/yellow]")
             return
         except (ProcessLookupError, OSError):
             pid_path.unlink(missing_ok=True)  # stale PID
@@ -228,12 +228,12 @@ def _start_api_server(api_port: int) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as log:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "gpu_directer", "server", "serve", "--port", str(api_port)],
+            [sys.executable, "-m", "gpu_access_router", "server", "serve", "--port", str(api_port)],
             stdout=log, stderr=log,
             start_new_session=True,
         )
     pid_path.write_text(str(proc.pid))
-    console.print(f"[green]✓ GPU Directer server started (PID {proc.pid}, port {api_port}).[/green]")
+    console.print(f"[green]✓ GPU Access Router server started (PID {proc.pid}, port {api_port}).[/green]")
     console.print(f"  Logs: {log_path}")
 
 
@@ -246,27 +246,27 @@ def _stop_api_server() -> None:
         try:
             pid = int(pid_path.read_text().strip())
             os.kill(pid, signal.SIGTERM)
-            console.print(f"[green]✓ GPU Directer server stopped (PID {pid}).[/green]")
+            console.print(f"[green]✓ GPU Access Router server stopped (PID {pid}).[/green]")
             stopped = True
         except (ProcessLookupError, OSError):
             console.print("[yellow]Stale PID file removed.[/yellow]")
         finally:
             pid_path.unlink(missing_ok=True)
 
-    # Fallback: kill any remaining gpu-directer serve / uvicorn processes
+    # Fallback: kill any remaining gpu-access-router serve / uvicorn processes
     killed = subprocess.run(
-        ["pkill", "-f", "gpu-directer server serve"],
+        ["pkill", "-f", "gpu-access-router server serve"],
         capture_output=True,
     ).returncode == 0
     killed |= subprocess.run(
-        ["pkill", "-f", "gpu_directer.server.api"],
+        ["pkill", "-f", "gpu_access_router.server.api"],
         capture_output=True,
     ).returncode == 0
 
     if killed and not stopped:
-        console.print("[green]✓ GPU Directer server process killed.[/green]")
+        console.print("[green]✓ GPU Access Router server process killed.[/green]")
     elif not stopped and not killed:
-        console.print("[yellow]No running GPU Directer server found.[/yellow]")
+        console.print("[yellow]No running GPU Access Router server found.[/yellow]")
 
 
 # ---------------------------------------------------------------------------
@@ -287,11 +287,11 @@ def client(ctx, json_output, quiet):
 
 
 def _require_client_deps():
-    from gpu_directer.client import HAVE_CLIENT
+    from gpu_access_router.client import HAVE_CLIENT
     if not HAVE_CLIENT:
         err_console.print(
             "[red]Client dependencies not installed. Install with:[/red]\n"
-            "  pip install gpu-directer[client]"
+            "  pip install gpu-access-router[client]"
         )
         sys.exit(1)
 
@@ -304,7 +304,7 @@ def _require_client_deps():
 def client_setup(ctx, server_ip, port, non_interactive):
     """Interactive wizard to connect a client to the GPU server."""
     _require_client_deps()
-    from gpu_directer.client.setup_wizard import run_client_setup
+    from gpu_access_router.client.setup_wizard import run_client_setup
     run_client_setup(
         server_ip=server_ip,
         port=port,
@@ -319,7 +319,7 @@ def client_setup(ctx, server_ip, port, non_interactive):
 def client_status(ctx, json_flag):
     """Show current connection status between client and configured server."""
     _require_client_deps()
-    from gpu_directer.client.status import get_client_status
+    from gpu_access_router.client.status import get_client_status
     obj: _Ctx = ctx.obj
     status_data = get_client_status(config_path=obj.config_path)
     if obj.json_output or json_flag:
@@ -336,9 +336,9 @@ def _print_client_status(data):
     local = data.get("local", {})
     cfg = data.get("config", {})
 
-    console.print("\n[bold]GPU Directer Client Status[/bold]")
+    console.print("\n[bold]GPU Access Router Client Status[/bold]")
     ip = cfg.get("server_ip", "not configured")
-    port = cfg.get("server_port", DEFAULT_PORT)
+    port = cfg.get("server_port", DEFAULT_API_PORT)
     console.print(f"  Server IP:      {ip}:{port}")
     if remote.get("reachable"):
         console.print("  Server status:  [green]● online[/green]")
@@ -367,12 +367,12 @@ def _print_client_status(data):
 def client_models(ctx, source, json_flag):
     """List models available on the remote server and/or local Ollama."""
     _require_client_deps()
-    from gpu_directer.client.connectivity import query_server_models, query_local_models
+    from gpu_access_router.client.connectivity import query_server_models, query_local_models
     obj: _Ctx = ctx.obj
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     config = cfg_mod.load_config(obj.config_path)
     server_ip = config.get("client", {}).get("server_ip", "")
-    server_port = config.get("client", {}).get("server_port", DEFAULT_PORT)
+    server_port = config.get("client", {}).get("server_port", DEFAULT_API_PORT)
 
     rows = []
     if source in ("remote", "all") and server_ip:
@@ -421,13 +421,13 @@ def config_group(ctx, json_output, quiet):
 @click.pass_context
 def config_show(ctx, json_flag):
     """Print current configuration."""
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     obj: _Ctx = ctx.obj
     data = cfg_mod.load_config(obj.config_path)
     if obj.json_output or json_flag:
         click.echo(json.dumps(data, indent=2))
         return
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router.core.constants import CONFIG_PATH
     path_display = obj.config_path or str(CONFIG_PATH)
     console.print(f"[dim]Config: {path_display}[/dim]\n")
     for section, values in data.items():
@@ -443,8 +443,8 @@ def config_show(ctx, json_flag):
 @click.pass_context
 def config_set(ctx, keyvalue):
     """Update a single config value (format: key=value)."""
-    from gpu_directer import config as cfg_mod
-    from gpu_directer.core.exceptions import GPUDirecterConfigError
+    from gpu_access_router import config as cfg_mod
+    from gpu_access_router.core.exceptions import GPUAccessRouterConfigError
     obj: _Ctx = ctx.obj
     if "=" not in keyvalue:
         err_console.print("[red]Error:[/red] Expected format: key=value (e.g. client.routing_mode=local)")
@@ -454,7 +454,7 @@ def config_set(ctx, keyvalue):
         cfg_mod.set_value(key.strip(), value.strip(), obj.config_path)
         if not obj.quiet:
             console.print(f"[green]Set[/green] {key.strip()} = {value.strip()!r}")
-    except GPUDirecterConfigError as exc:
+    except GPUAccessRouterConfigError as exc:
         err_console.print(f"[red]Error:[/red] {exc}")
         sys.exit(1)
 
@@ -463,8 +463,8 @@ def config_set(ctx, keyvalue):
 @click.pass_context
 def config_edit(ctx):
     """Open config file in $EDITOR (falls back to nano)."""
-    from gpu_directer import config as cfg_mod
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router import config as cfg_mod
+    from gpu_access_router.core.constants import CONFIG_PATH
     obj: _Ctx = ctx.obj
     config_path = Path(obj.config_path) if obj.config_path else CONFIG_PATH
     if not config_path.exists():
@@ -478,18 +478,13 @@ def config_edit(ctx):
 @click.pass_context
 def config_reset(ctx, yes):
     """Reset configuration to defaults."""
-    from gpu_directer import config as cfg_mod
+    from gpu_access_router import config as cfg_mod
     obj: _Ctx = ctx.obj
     if not yes:
         click.confirm("Reset config to defaults? This will overwrite your current settings.", abort=True)
     cfg = cfg_mod.create_default_config()
     cfg_mod.save_config(cfg, obj.config_path)
-    from gpu_directer.core.constants import CONFIG_PATH
+    from gpu_access_router.core.constants import CONFIG_PATH
     path_display = obj.config_path or str(CONFIG_PATH)
     console.print(f"[green]✓ Config reset to defaults:[/green] {path_display}")
 
-
-# ---------------------------------------------------------------------------
-# Missing import at top — needed for config edit
-# ---------------------------------------------------------------------------
-from pathlib import Path  # noqa: E402

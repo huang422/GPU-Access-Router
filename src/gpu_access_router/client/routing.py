@@ -3,8 +3,8 @@
 import warnings
 from typing import Any, Dict, Optional
 
-from gpu_directer.core.constants import DEFAULT_API_PORT
-from gpu_directer.core.exceptions import GPUDirecterConnectionError
+from gpu_access_router.core.constants import DEFAULT_API_PORT
+from gpu_access_router.core.exceptions import GPUAccessRouterConnectionError
 
 
 def resolve_route(
@@ -14,9 +14,9 @@ def resolve_route(
 ) -> str:
     """Return 'remote' or 'local' based on 4-step decision tree.
 
-    Raises GPUDirecterConnectionError when no route is available.
+    Raises GPUAccessRouterConnectionError when no route is available.
     """
-    from gpu_directer.client.connectivity import (
+    from gpu_access_router.client.connectivity import (
         probe_server,
         query_local_models,
         query_server_models,
@@ -30,12 +30,12 @@ def resolve_route(
     # Explicit remote-only
     if routing_mode == "remote":
         if not server_ip:
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 "routing_mode is 'remote' but no server_ip configured. "
-                "Run: gpu-directer client setup"
+                "Run: gpu-access-router client setup"
             )
         if not probe_server(server_ip, server_port):
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 f"routing_mode is 'remote' but server {server_ip}:{server_port} is unreachable."
             )
         return "remote"
@@ -44,7 +44,7 @@ def resolve_route(
     if routing_mode == "local":
         local_models = query_local_models()
         if local_models is None:
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 "routing_mode is 'local' but local Ollama is not reachable at http://localhost:11434."
             )
         return "local"
@@ -76,11 +76,11 @@ def resolve_route(
         # Model confirmed not on remote — show what IS available
         available = ", ".join(remote_models) if remote_models else "none"
         if local_models is None:
-            raise GPUDirecterConnectionError(
+            raise GPUAccessRouterConnectionError(
                 f"Model '{model}' not found on remote server and local Ollama is unreachable. "
                 f"Remote has: [{available}]"
             )
-        raise GPUDirecterConnectionError(
+        raise GPUAccessRouterConnectionError(
             f"Model '{model}' not found on remote server or local Ollama. "
             f"Remote has: [{available}]"
         )
@@ -90,6 +90,6 @@ def resolve_route(
     if local_models is not None:
         return "local"
 
-    raise GPUDirecterConnectionError(
+    raise GPUAccessRouterConnectionError(
         "No routing target available. Remote server is unreachable and local Ollama is not running."
     )

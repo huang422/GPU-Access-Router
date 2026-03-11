@@ -1,9 +1,9 @@
 # Contract: Server REST API
 
 **Branch**: `001-gpu-router-toolkit` | **Date**: 2026-03-11
-**Base URL**: `http://<tailscale-ip>:11434` (same port as Ollama; GPU Directer server wraps Ollama)
+**Base URL**: `http://<tailscale-ip>:11434` (same port as Ollama; GPU Access Router server wraps Ollama)
 
-The GPU Directer server adds a thin FastAPI layer on top of Ollama that enforces the serial queue. All Ollama-native endpoints remain accessible; the server adds `/gd/*` prefixed routes for queue management and health.
+The GPU Access Router server adds a thin FastAPI layer on top of Ollama that enforces the serial queue. All Ollama-native endpoints remain accessible; the server adds `/gd/*` prefixed routes for queue management and health.
 
 ---
 
