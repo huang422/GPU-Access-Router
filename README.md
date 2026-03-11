@@ -237,7 +237,7 @@ print()
 # Force remote inference
 try:
     response = router.chat(
-        model="qwen3.5:35b-a3b",
+        model="qwen3.5:9b",
         messages=[{"role": "user", "content": "Reply with just: OK"}],
         prefer="remote",
     )
@@ -272,13 +272,13 @@ print(response.message.content)
 msgs = [{"role": "user", "content": "Hello!"}]
 
 # Auto (default): try remote first, fall back to local
-response = router.chat(model="qwen3.5:35b-a3b", messages=msgs)
+response = router.chat(model="qwen3.5:9b", messages=msgs)
 
 # Force remote only (raises GPUDirecterConnectionError if unreachable)
-response = router.chat(model="qwen3.5:35b-a3b", messages=msgs, prefer="remote")
+response = router.chat(model="qwen3.5:9b", messages=msgs, prefer="remote")
 
 # Force local only
-response = router.chat(model="qwen3.5:35b-a3b", messages=msgs, prefer="local")
+response = router.chat(model="qwen3.5:9b", messages=msgs, prefer="local")
 ```
 
 ### Check what's available

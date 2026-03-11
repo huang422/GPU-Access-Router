@@ -1,5 +1,6 @@
 """TOML configuration read/write for GPU Directer."""
 
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,7 +48,12 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
 
 
 def _resolve_path(path: Optional[str]) -> Path:
-    return Path(path) if path else CONFIG_PATH
+    if path:
+        return Path(path)
+    env_path = os.environ.get("GPU_DIRECTER_CONFIG")
+    if env_path:
+        return Path(env_path)
+    return CONFIG_PATH
 
 
 def create_default_config() -> Dict[str, Any]:
