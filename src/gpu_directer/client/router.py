@@ -101,6 +101,21 @@ class GPURouter:
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
                 result = json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            body = ""
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                pass
+            if exc.code == 503:
+                raise GPUDirecterConnectionError(
+                    f"Server queue unavailable (503). "
+                    f"Queue may be full or server is still starting up. "
+                    f"Run 'gpu-directer server restart' to clear the queue. Detail: {body}"
+                ) from exc
+            raise GPUDirecterConnectionError(
+                f"Failed to submit request to {base_url}/gd/chat: HTTP {exc.code} {body}"
+            ) from exc
         except Exception as exc:
             raise GPUDirecterConnectionError(
                 f"Failed to submit request to {base_url}/gd/chat: {exc}"
