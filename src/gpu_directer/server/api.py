@@ -23,7 +23,7 @@ except ImportError as exc:
         "Server dependencies not installed. Install with: pip install gpu-directer[server]"
     ) from exc
 
-from gpu_directer.core.constants import DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
+from gpu_directer.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 from gpu_directer.server.queue import SerialQueue
 
 app = FastAPI(title="GPU Directer Server", version="0.1.0")
@@ -69,7 +69,15 @@ async def startup_event():
             return _chat_response_to_dict(resp)
         return resp
 
+    def _unload_model(model: str) -> None:
+        """Unload a model from GPU memory by setting keep_alive=0."""
+        try:
+            ollama_client.generate(model=model, prompt="", keep_alive=0)
+        except Exception:
+            pass  # best-effort
+
     _serial_queue.set_ollama_callable(_ollama_call)
+    _serial_queue.set_unload_callable(_unload_model)
     _serial_queue.start()
 
 
@@ -222,7 +230,7 @@ def _fmt_ts(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def run_server(host: str = "0.0.0.0", port: int = DEFAULT_PORT, reload: bool = False):
+def run_server(host: str = "0.0.0.0", port: int = DEFAULT_API_PORT, reload: bool = False):
     """Start the FastAPI server via uvicorn."""
     uvicorn.run(
         "gpu_directer.server.api:app",

@@ -45,6 +45,8 @@ class SerialQueue:
         self.timeout_seconds = timeout_seconds
         self.max_depth = max_depth  # 0 = unlimited
         self._ollama_callable: Optional[Callable] = ollama_callable
+        self._unload_callable: Optional[Callable] = None
+        self._current_model: Optional[str] = None
 
         self._queue: asyncio.Queue = asyncio.Queue()
         self._lock: asyncio.Lock = asyncio.Lock()
@@ -54,6 +56,10 @@ class SerialQueue:
 
     def set_ollama_callable(self, callable_: Callable) -> None:
         self._ollama_callable = callable_
+
+    def set_unload_callable(self, callable_: Callable) -> None:
+        """Set a callable(model: str) that unloads a model from GPU memory."""
+        self._unload_callable = callable_
 
     def start(self) -> None:
         """Start the background processing loop (call from asyncio context)."""
@@ -124,10 +130,23 @@ class SerialQueue:
                 try:
                     if self._ollama_callable is None:
                         raise RuntimeError("No Ollama callable configured.")
+
+                    # If switching models, unload the previous one to free GPU memory
+                    if (
+                        self._unload_callable is not None
+                        and self._current_model is not None
+                        and self._current_model != req.model
+                    ):
+                        try:
+                            await self._call_unload(self._current_model)
+                        except Exception:
+                            pass  # best-effort; proceed even if unload fails
+
                     result = await asyncio.wait_for(
                         self._call_ollama(req),
                         timeout=req.timeout_seconds,
                     )
+                    self._current_model = req.model
                     req.result = result
                     req.status = "complete"
                 except asyncio.TimeoutError:
@@ -140,12 +159,24 @@ class SerialQueue:
                     self._queue.task_done()
 
     async def _call_ollama(self, req: InferenceRequest) -> Dict:
-        """Invoke the Ollama callable (may be sync or async)."""
+        """Run the Ollama callable without blocking the event loop."""
         import inspect
-        coro = self._ollama_callable(req.model, req.messages, req.options)
-        if inspect.isawaitable(coro):
-            return await coro
-        return coro
+        if inspect.iscoroutinefunction(self._ollama_callable):
+            return await self._ollama_callable(req.model, req.messages, req.options)
+        # Sync callable — run in thread pool so polling endpoints stay responsive
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, self._ollama_callable, req.model, req.messages, req.options
+        )
+
+    async def _call_unload(self, model: str) -> None:
+        """Run the unload callable without blocking the event loop."""
+        import inspect
+        if inspect.iscoroutinefunction(self._unload_callable):
+            await self._unload_callable(model)
+        else:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._unload_callable, model)
 
     def _recalculate_positions(self) -> None:
         """Update queue_position for all waiting requests."""
