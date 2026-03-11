@@ -99,7 +99,7 @@ class GPURouter:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=60) as resp:
                 result = json.loads(resp.read())
         except Exception as exc:
             raise GPUDirecterConnectionError(
