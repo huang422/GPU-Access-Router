@@ -239,20 +239,34 @@ def _start_api_server(api_port: int) -> None:
 
 def _stop_api_server() -> None:
     pid_path = _pid_file()
-    if not pid_path.exists():
-        console.print("[yellow]Server is not running (no PID file found).[/yellow]")
-        return
-    try:
-        pid = int(pid_path.read_text().strip())
-        os.kill(pid, signal.SIGTERM)
-        pid_path.unlink(missing_ok=True)
-        console.print(f"[green]✓ GPU Directer server stopped (PID {pid}).[/green]")
-    except (ProcessLookupError, OSError):
-        pid_path.unlink(missing_ok=True)
-        console.print("[yellow]Server was not running (stale PID file removed).[/yellow]")
-    except Exception as exc:
-        err_console.print(f"[red]Failed to stop server: {exc}[/red]")
-        sys.exit(2)
+    stopped = False
+
+    # Try PID file first
+    if pid_path.exists():
+        try:
+            pid = int(pid_path.read_text().strip())
+            os.kill(pid, signal.SIGTERM)
+            console.print(f"[green]✓ GPU Directer server stopped (PID {pid}).[/green]")
+            stopped = True
+        except (ProcessLookupError, OSError):
+            console.print("[yellow]Stale PID file removed.[/yellow]")
+        finally:
+            pid_path.unlink(missing_ok=True)
+
+    # Fallback: kill any remaining gpu-directer serve / uvicorn processes
+    killed = subprocess.run(
+        ["pkill", "-f", "gpu-directer server serve"],
+        capture_output=True,
+    ).returncode == 0
+    killed |= subprocess.run(
+        ["pkill", "-f", "gpu_directer.server.api"],
+        capture_output=True,
+    ).returncode == 0
+
+    if killed and not stopped:
+        console.print("[green]✓ GPU Directer server process killed.[/green]")
+    elif not stopped and not killed:
+        console.print("[yellow]No running GPU Directer server found.[/yellow]")
 
 
 # ---------------------------------------------------------------------------
