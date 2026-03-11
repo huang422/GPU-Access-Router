@@ -186,7 +186,73 @@ GPU Directer Client Status
 
 ---
 
-## Part 4: Use GPURouter in Your Code
+## Part 4: Test the Connection (Client)
+
+After client setup, verify everything works end-to-end.
+
+### Step 1 — Check connectivity
+
+```bash
+gpu-directer client status       # server reachable + queue depth
+gpu-directer client models       # list remote and local models
+```
+
+### Step 2 — Run inference from Python
+
+```python
+from gpu_directer import GPURouter
+
+router = GPURouter()
+
+# Quick status check
+status = router.status()
+print("Remote reachable:", status["remote"]["reachable"])
+print("Models:", [m["name"] for m in status["remote"].get("models", [])])
+
+# Send a request — auto-routes to remote GPU server
+response = router.chat(
+    model="qwen3.5:9b",   # replace with any model pulled on the server
+    messages=[{"role": "user", "content": "What is 2+2?"}]
+)
+print(response.message.content)
+```
+
+### Step 3 — Full end-to-end test script
+
+Save as `test_gpu.py` and run from your client machine:
+
+```python
+from gpu_directer import GPURouter, GPUDirecterConnectionError
+
+router = GPURouter()
+
+# Print status
+s = router.status()
+print(f"Server:    {s['remote']['server_ip']}:{s['remote']['port']}")
+print(f"Reachable: {s['remote']['reachable']}")
+print(f"Queue:     {s['remote'].get('queue_depth', 0)} waiting")
+print(f"Models:    {[m['name'] for m in s['remote'].get('models', [])]}")
+print()
+
+# Force remote inference
+try:
+    response = router.chat(
+        model="qwen3.5:35b-a3b",
+        messages=[{"role": "user", "content": "Reply with just: OK"}],
+        prefer="remote",
+    )
+    print("✓ Remote inference success:", response.message.content.strip())
+except GPUDirecterConnectionError as e:
+    print(f"✗ Remote not available: {e}")
+```
+
+```bash
+python test_gpu.py
+```
+
+---
+
+## Part 5: Use GPURouter in Your Code
 
 ```python
 from gpu_directer import GPURouter
@@ -194,35 +260,34 @@ from gpu_directer import GPURouter
 router = GPURouter()
 
 response = router.chat(
-    model="llama3.2",
+    model="qwen3.5:35b-a3b",
     messages=[{"role": "user", "content": "Explain what a GPU is in one sentence."}]
 )
-
 print(response.message.content)
 ```
 
 ### Routing modes
 
 ```python
-# Auto (default): remote first, fall back to local if unavailable
-response = router.chat(model="llama3.2", messages=msgs)
+msgs = [{"role": "user", "content": "Hello!"}]
+
+# Auto (default): try remote first, fall back to local
+response = router.chat(model="qwen3.5:35b-a3b", messages=msgs)
 
 # Force remote only (raises GPUDirecterConnectionError if unreachable)
-response = router.chat(model="llama3.2", messages=msgs, prefer="remote")
+response = router.chat(model="qwen3.5:35b-a3b", messages=msgs, prefer="remote")
 
 # Force local only
-response = router.chat(model="llama3.2", messages=msgs, prefer="local")
+response = router.chat(model="qwen3.5:35b-a3b", messages=msgs, prefer="local")
 ```
 
 ### Check what's available
 
 ```python
-# List models
 models = router.list_models()
 print("Remote:", [m["name"] for m in models["remote"] or []])
-print("Local:", [m["name"] for m in models["local"] or []])
+print("Local:",  [m["name"] for m in models["local"] or []])
 
-# Full status
 status = router.status()
 print("Queue depth:", status["remote"].get("queue_depth", 0))
 print("Routing mode:", status["routing_mode"])
@@ -230,7 +295,7 @@ print("Routing mode:", status["routing_mode"])
 
 ---
 
-## Part 5: Configuration Reference
+## Part 6: Configuration Reference
 
 Config is stored at `~/.gpu-directer/config.toml`:
 
@@ -276,19 +341,19 @@ gpu-directer config reset
 
 ---
 
-## Part 6: Complete Command Reference
+## Part 7: Complete Command Reference
 
 ### Server commands (requires `[server]` install)
 
 | Command | Description |
 |---|---|
-| `gpu-directer server setup [--non-interactive] [--port PORT] [--api-port PORT]` | Interactive setup wizard |
-| `gpu-directer server serve [--host HOST] [--port PORT] [--reload]` | Start the FastAPI queue server |
+| `gpu-directer server setup [--port PORT] [--api-port PORT]` | Run setup wizard (auto-starts API server at the end) |
+| `gpu-directer server start` | Start GPU Directer API server in background |
+| `gpu-directer server stop` | Stop GPU Directer API server |
+| `gpu-directer server restart` | Restart GPU Directer API server |
+| `gpu-directer server serve [--host HOST] [--port PORT] [--reload]` | Start API server in foreground (dev/debug mode) |
 | `gpu-directer server doctor [--json]` | 6-point health check |
-| `gpu-directer server models [--json]` | List models on this server (requires `server serve` running) |
-| `gpu-directer server start` | Start Ollama Docker container |
-| `gpu-directer server stop` | Stop Ollama Docker container |
-| `gpu-directer server restart` | Restart Ollama Docker container |
+| `gpu-directer server models [--json]` | List models (requires API server running) |
 
 ### Client commands (requires `[client]` install)
 

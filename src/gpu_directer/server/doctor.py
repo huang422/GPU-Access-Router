@@ -160,7 +160,7 @@ def check_queue_status(api_port: int = DEFAULT_API_PORT) -> Dict[str, str]:
         return _check(
             "queue_status", "fail",
             f"GPU Directer server API not reachable: {exc}",
-            "Start the server: gpu-directer server start",
+            "Start the server: gpu-directer server serve",
         )
 
 

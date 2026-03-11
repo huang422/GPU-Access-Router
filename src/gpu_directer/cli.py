@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import subprocess
 import sys
 
@@ -160,21 +161,32 @@ def server_models(ctx, json_flag):
 
 
 @server.command("start")
-def server_start():
-    """Start the Ollama Docker container."""
-    _run_docker_lifecycle("start")
+@click.pass_context
+def server_start(ctx):
+    """Start the GPU Directer API server in the background."""
+    _require_server_deps()
+    from gpu_directer import config as cfg_mod
+    cfg = cfg_mod.load_config(ctx.obj.config_path)
+    api_port = cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
+    _start_api_server(api_port)
 
 
 @server.command("stop")
 def server_stop():
-    """Stop the Ollama Docker container."""
-    _run_docker_lifecycle("stop")
+    """Stop the GPU Directer API server."""
+    _stop_api_server()
 
 
 @server.command("restart")
-def server_restart():
-    """Restart the Ollama Docker container."""
-    _run_docker_lifecycle("restart")
+@click.pass_context
+def server_restart(ctx):
+    """Restart the GPU Directer API server."""
+    _stop_api_server()
+    _require_server_deps()
+    from gpu_directer import config as cfg_mod
+    cfg = cfg_mod.load_config(ctx.obj.config_path)
+    api_port = cfg.get("server", {}).get("api_port", DEFAULT_API_PORT)
+    _start_api_server(api_port)
 
 
 @server.command("serve")
@@ -182,22 +194,64 @@ def server_restart():
 @click.option("--port", default=DEFAULT_API_PORT, type=int, show_default=True)
 @click.option("--reload", is_flag=True, default=False, help="Auto-reload on code changes (dev only).")
 def server_serve(host, port, reload):
-    """Start the GPU Directer FastAPI server (queue + /gd/* endpoints)."""
+    """Start the GPU Directer FastAPI server in the foreground (dev mode)."""
     _require_server_deps()
     from gpu_directer.server.api import run_server
     console.print(f"[bold]Starting GPU Directer API server on {host}:{port}…[/bold]")
     run_server(host=host, port=port, reload=reload)
 
 
-def _run_docker_lifecycle(action: str):
-    result = subprocess.run(
-        ["docker", action, "ollama"],
-        capture_output=True, text=True
-    )
-    if result.returncode == 0:
-        console.print(f"[green]✓ Ollama container {action}ed successfully.[/green]")
-    else:
-        err_console.print(f"[red]Failed to {action} ollama container:[/red] {result.stderr.strip()}")
+def _pid_file() -> "Path":
+    from gpu_directer.core.constants import CONFIG_PATH
+    return CONFIG_PATH.parent / "server.pid"
+
+
+def _log_file() -> "Path":
+    from gpu_directer.core.constants import CONFIG_PATH
+    return CONFIG_PATH.parent / "server.log"
+
+
+def _start_api_server(api_port: int) -> None:
+    pid_path = _pid_file()
+    log_path = _log_file()
+
+    # Check if already running
+    if pid_path.exists():
+        try:
+            pid = int(pid_path.read_text().strip())
+            os.kill(pid, 0)
+            console.print(f"[yellow]GPU Directer server already running (PID {pid}, port {api_port}).[/yellow]")
+            return
+        except (ProcessLookupError, OSError):
+            pid_path.unlink(missing_ok=True)  # stale PID
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a") as log:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "gpu_directer", "server", "serve", "--port", str(api_port)],
+            stdout=log, stderr=log,
+            start_new_session=True,
+        )
+    pid_path.write_text(str(proc.pid))
+    console.print(f"[green]✓ GPU Directer server started (PID {proc.pid}, port {api_port}).[/green]")
+    console.print(f"  Logs: {log_path}")
+
+
+def _stop_api_server() -> None:
+    pid_path = _pid_file()
+    if not pid_path.exists():
+        console.print("[yellow]Server is not running (no PID file found).[/yellow]")
+        return
+    try:
+        pid = int(pid_path.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+        pid_path.unlink(missing_ok=True)
+        console.print(f"[green]✓ GPU Directer server stopped (PID {pid}).[/green]")
+    except (ProcessLookupError, OSError):
+        pid_path.unlink(missing_ok=True)
+        console.print("[yellow]Server was not running (stale PID file removed).[/yellow]")
+    except Exception as exc:
+        err_console.print(f"[red]Failed to stop server: {exc}[/red]")
         sys.exit(2)
 
 

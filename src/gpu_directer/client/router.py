@@ -28,7 +28,6 @@ class GPURouter:
         timeout: Optional[int] = None,
     ):
         from gpu_directer import config as cfg_mod
-        from gpu_directer.core.exceptions import GPUDirecterConfigError
 
         try:
             self._config = cfg_mod.load_config(config_path)
@@ -46,16 +45,7 @@ class GPURouter:
         self.server_ip: Optional[str] = client_cfg.get("server_ip") or None
         self.server_port: int = int(client_cfg.get("server_port", DEFAULT_API_PORT))
 
-        self._remote_client = None
         self._local_client = None
-
-    def _get_remote_client(self):
-        if self._remote_client is None:
-            import ollama
-            self._remote_client = ollama.Client(
-                host=f"http://{self.server_ip}:{self.server_port}"
-            )
-        return self._remote_client
 
     def _get_local_client(self):
         if self._local_client is None:
