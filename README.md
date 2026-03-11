@@ -1,6 +1,12 @@
 # GPU Directer
 
-Route LLM inference calls to a remote GPU server or fall back to local Ollama automatically — with a single Python class and a simple CLI.
+[![Python](https://img.shields.io/badge/python-3.8%20|%203.9%20|%203.10%20|%203.11%20|%203.12-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-lightgrey)]()
+[![Ollama](https://img.shields.io/badge/ollama-compatible-orange)](https://ollama.com)
+[![Tailscale](https://img.shields.io/badge/network-Tailscale-blueviolet)](https://tailscale.com)
+
+Route LLM inference calls to a remote GPU server or fall back to local Ollama automatically — with a single Python class, a simple CLI, and a transparent `ollama` command shim.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -295,7 +301,56 @@ print("Routing mode:", status["routing_mode"])
 
 ---
 
-## Part 6: Configuration Reference
+## Part 6: ollama CLI Shim
+
+When gpu-directer is installed in a conda/venv environment, it installs a transparent `ollama` shim that **replaces the system `ollama` command inside that environment**. All `ollama` commands automatically target the remote GPU server.
+
+### Command routing
+
+| Command | Behaviour |
+|---|---|
+| `ollama list` / `ollama ls` | List models on the **remote** GPU server |
+| `ollama ps` | Show remote queue depth and processing status |
+| `ollama show <model>` | Show remote model details (size, digest, family) |
+| `ollama run <model> "prompt"` | Run single-shot inference on **remote** GPU |
+| `ollama pull <model>` | Print SSH instructions to pull on the server |
+| `ollama push <model>` | Print SSH instructions to push from the server |
+| `ollama rm <model>` | Print SSH instructions to remove on the server |
+| `ollama stop <model>` | Print SSH instructions to stop on the server |
+| `ollama cp <src> <dst>` | Print SSH instructions to copy on the server |
+| `ollama create <name>` | Print SSH instructions to create on the server |
+| `ollama serve` | Print SSH note (server is already running) |
+| `ollama run <model>` (no prompt) | Pass through to local ollama (interactive mode) |
+| Any other command | Pass through to local ollama |
+
+### Example
+
+```bash
+conda activate rgpu
+
+ollama list
+# NAME                                            ID              SIZE      MODIFIED
+# qwen3.5:9b                                      a1b2c3d4e5f6    5.4 GB    2026-03-10 14:22:00
+
+ollama ps
+# Remote GPU server  100.64.0.5:8080
+#   Status:    idle
+#   Queue:     0 waiting
+#   Uptime:    2h 15m
+
+ollama run qwen3.5:9b "用繁體中文解釋什麼是機器學習"
+# 機器學習是人工智能的一個分支...
+
+ollama pull llama3.2
+# [gpu-directer] 'pull' must run on the remote GPU server.
+#   SSH in and run:
+#     ssh <user>@100.64.0.5
+#     ollama pull llama3.2
+```
+
+---
+
+## Part 7: Configuration Reference
 
 Config is stored at `~/.gpu-directer/config.toml`:
 
@@ -339,9 +394,58 @@ gpu-directer config edit
 gpu-directer config reset
 ```
 
+### Per-environment config (conda / venv)
+
+By default all environments share `~/.gpu-directer/config.toml`.
+Use `GPU_DIRECTER_CONFIG` to give each conda/venv environment its **own** config — so only the `rgpu` environment connects to the remote GPU server.
+
+**Step 1 — Create the rgpu config**
+
+```bash
+conda activate rgpu
+
+# Create a separate config for this environment
+gpu-directer --config ~/.gpu-directer/rgpu.toml config set client.server_ip=100.64.0.5
+gpu-directer --config ~/.gpu-directer/rgpu.toml config set client.routing_mode=remote
+```
+
+**Step 2 — Set default config to local-only**
+
+```bash
+# In your base / default environment
+gpu-directer config set client.routing_mode=local
+```
+
+**Step 3 — Auto-load config when activating the conda env**
+
+```bash
+conda activate rgpu
+
+mkdir -p $CONDA_PREFIX/etc/conda/activate.d
+mkdir -p $CONDA_PREFIX/etc/conda/deactivate.d
+
+echo 'export GPU_DIRECTER_CONFIG="$HOME/.gpu-directer/rgpu.toml"' \
+  > $CONDA_PREFIX/etc/conda/activate.d/gpu_directer.sh
+
+echo 'unset GPU_DIRECTER_CONFIG' \
+  > $CONDA_PREFIX/etc/conda/deactivate.d/gpu_directer.sh
+```
+
+**Result**
+
+| Environment | Config loaded | ollama command | Routing |
+|---|---|---|---|
+| `conda activate rgpu` | `~/.gpu-directer/rgpu.toml` | proxies to remote GPU | Remote GPU server |
+| base / other envs | `~/.gpu-directer/config.toml` | real system ollama | Local Ollama |
+| `conda deactivate` | env var cleared | real system ollama | Local Ollama |
+
+> **Note**: The same approach works with venv — place the `export` in `<venv>/bin/activate` and `unset` in `<venv>/bin/deactivate`.
+>
+> `GPU_DIRECTER_CONFIG` is also respected by `GPURouter()` in Python — no code changes needed.
+
 ---
 
-## Part 7: Complete Command Reference
+## Part 8: Complete Command Reference
 
 ### Server commands (requires `[server]` install)
 
@@ -383,7 +487,7 @@ gpu-directer config reset
 
 ---
 
-## Part 7: Developer Workflow
+## Part 9: Developer Workflow
 
 ### Initial setup (dev machine, editable install)
 
@@ -462,6 +566,23 @@ gpu-directer server serve         # Should be running in background
 curl http://<tailscale-ip>:8080/gd/health
 ```
 
+### ollama shim not taking effect
+
+```bash
+# Check which ollama is active
+which ollama
+# Should show: .../envs/rgpu/bin/ollama
+# If it shows /usr/local/bin/ollama, reinstall:
+pip install --force-reinstall --no-cache-dir \
+  "gpu-directer[client] @ git+https://github.com/huang422/GPU-Directer.git"
+
+# Check GPU_DIRECTER_CONFIG is set
+echo $GPU_DIRECTER_CONFIG
+# Should show: /home/user/.gpu-directer/rgpu.toml
+# If empty, re-activate the environment:
+conda deactivate && conda activate rgpu
+```
+
 ### GPU not detected by Ollama
 
 ```bash
@@ -495,9 +616,9 @@ UserWarning: Model 'llama3.2' not found on remote server, routing to local Ollam
 
 Pull the model on the server:
 ```bash
-# Native Ollama:
+# Native Ollama (SSH into server):
 ollama pull llama3.2
 
-# Docker Ollama:
+# Docker Ollama (SSH into server):
 docker exec ollama ollama pull llama3.2
 ```
