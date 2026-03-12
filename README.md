@@ -228,9 +228,9 @@ When installed in a conda/venv environment, GPU Access Router provides a transpa
 ```bash
 conda activate my-gpu-env
 
-ollama list                          # Lists models on REMOTE server
+ollama list                            # Lists models on REMOTE server
 ollama run qwen3.5:9b "Hello world"    # Runs inference on REMOTE GPU
-ollama ps                            # Shows remote queue status
+ollama ps                              # Shows remote queue status
 ollama show qwen3.5:9b                 # Shows remote model details
 
 ollama pull qwen3.5:9b                 # Prints SSH instructions
@@ -297,12 +297,12 @@ Config file: `~/.gpu-access-router/config.toml`
 
 ```toml
 [client]
-server_ip       = "100.64.0.5"   # Tailscale IP of GPU server
+server_ip       = "100.64.0.5"    # Tailscale IP of GPU server
 server_port     = 8080            # GPU Access Router API port
 routing_mode    = "auto"          # "auto" | "remote" | "local"
 timeout_seconds = 300             # Queue wait timeout
 default_model   = ""              # Optional default model
-fallback_model  = "qwen3.5:9b"   # Local model to use when remote fails (optional)
+fallback_model  = "qwen3.5:9b"    # Local model to use when remote fails (optional)
 
 [server]
 ollama_port     = 11434           # Internal Ollama port
