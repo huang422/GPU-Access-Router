@@ -3,10 +3,21 @@
 import json
 import urllib.error
 import urllib.request
+import warnings
 from typing import Any, Dict, List, Optional
 
-from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
+from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_FALLBACK_MODEL, DEFAULT_PORT, DEFAULT_ROUTING_MODE, DEFAULT_TIMEOUT
 from gpu_access_router.core.exceptions import GPUAccessRouterConfigError, GPUAccessRouterConnectionError
+
+
+class _GenerateResponse:
+    """Minimal wrapper so remote generate() responses have a ``.response`` attribute."""
+
+    def __init__(self, text: str) -> None:
+        self.response = text
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"_GenerateResponse(response={self.response!r})"
 
 
 class GPURouter:
@@ -44,6 +55,7 @@ class GPURouter:
         self.timeout: int = timeout or int(client_cfg.get("timeout_seconds", DEFAULT_TIMEOUT))
         self.server_ip: Optional[str] = client_cfg.get("server_ip") or None
         self.server_port: int = int(client_cfg.get("server_port", DEFAULT_API_PORT))
+        self.fallback_model: str = client_cfg.get("fallback_model", DEFAULT_FALLBACK_MODEL)
 
         self._local_client = None
 
@@ -59,22 +71,51 @@ class GPURouter:
         messages: List[Dict[str, Any]],
         prefer: Optional[str] = None,
         timeout: Optional[int] = None,
+        fallback_model: Optional[str] = None,
         **kwargs,
     ):
         """Route and execute a chat inference call.
 
         Returns an ollama.ChatResponse (identical to ollama.Client.chat()).
+
+        If ``fallback_model`` is provided (or configured via ``client.fallback_model``
+        in config / ``GPU_ROUTER_FALLBACK_MODEL`` env var), it is used as a local
+        fallback when the primary route fails (e.g. remote inference error, or the
+        requested model is not available locally).
         """
         from gpu_access_router.client.routing import resolve_route
 
         effective_timeout = timeout or self.timeout
+        effective_fallback = fallback_model or self.fallback_model
 
         route = resolve_route(self._config, model, prefer=prefer or self.routing_mode)
 
         if route == "remote":
-            return self._chat_remote(model, messages, effective_timeout, **kwargs)
+            try:
+                return self._chat_remote(model, messages, effective_timeout, **kwargs)
+            except GPUAccessRouterConnectionError:
+                if effective_fallback:
+                    warnings.warn(
+                        f"Remote inference failed for '{model}'. "
+                        f"Falling back to local model '{effective_fallback}'.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    return self._chat_local(effective_fallback, messages, **kwargs)
+                raise
         else:
-            return self._chat_local(model, messages, **kwargs)
+            try:
+                return self._chat_local(model, messages, **kwargs)
+            except Exception:
+                if effective_fallback and model != effective_fallback:
+                    warnings.warn(
+                        f"Local model '{model}' unavailable. "
+                        f"Trying fallback model '{effective_fallback}'.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    return self._chat_local(effective_fallback, messages, **kwargs)
+                raise
 
     def _chat_remote(self, model, messages, timeout, **kwargs):
         """POST to /gd/chat and wait for the result (server blocks until inference completes)."""
@@ -131,6 +172,66 @@ class GPURouter:
         """Call local Ollama directly."""
         client = self._get_local_client()
         return client.chat(model=model, messages=messages, **kwargs)
+
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        prefer: Optional[str] = None,
+        timeout: Optional[int] = None,
+        fallback_model: Optional[str] = None,
+        **kwargs,
+    ):
+        """Route and execute a generate inference call.
+
+        For local routes uses ``ollama.Client.generate()`` natively.
+        For remote routes wraps the prompt as a chat message and calls
+        ``/gd/chat``, returning a response with a ``.response`` attribute.
+        """
+        from gpu_access_router.client.routing import resolve_route
+
+        effective_timeout = timeout or self.timeout
+        effective_fallback = fallback_model or self.fallback_model
+
+        route = resolve_route(self._config, model, prefer=prefer or self.routing_mode)
+
+        if route == "remote":
+            try:
+                return self._generate_remote(model, prompt, effective_timeout, **kwargs)
+            except GPUAccessRouterConnectionError:
+                if effective_fallback:
+                    warnings.warn(
+                        f"Remote inference failed for '{model}'. "
+                        f"Falling back to local model '{effective_fallback}'.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    return self._generate_local(effective_fallback, prompt, **kwargs)
+                raise
+        else:
+            try:
+                return self._generate_local(model, prompt, **kwargs)
+            except Exception:
+                if effective_fallback and model != effective_fallback:
+                    warnings.warn(
+                        f"Local model '{model}' unavailable. "
+                        f"Trying fallback model '{effective_fallback}'.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    return self._generate_local(effective_fallback, prompt, **kwargs)
+                raise
+
+    def _generate_remote(self, model: str, prompt: str, timeout: int, **kwargs):
+        """Send generate as a chat message to /gd/chat; wrap response."""
+        messages = [{"role": "user", "content": prompt}]
+        chat_response = self._chat_remote(model, messages, timeout, **kwargs)
+        return _GenerateResponse(chat_response.message.content)
+
+    def _generate_local(self, model: str, prompt: str, **kwargs):
+        """Call local Ollama generate directly."""
+        client = self._get_local_client()
+        return client.generate(model=model, prompt=prompt, **kwargs)
 
     def list_models(self, source: str = "auto") -> Dict[str, Any]:
         """List models on remote, local, or both.

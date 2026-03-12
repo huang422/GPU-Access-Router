@@ -300,8 +300,10 @@ def _require_client_deps():
 @click.option("--server-ip", default=None)
 @click.option("--port", default=DEFAULT_API_PORT, type=int, show_default=True)
 @click.option("--non-interactive", is_flag=True, default=False)
+@click.option("--fallback-model", default=None, metavar="MODEL",
+              help="Local model to use when remote inference fails (e.g. qwen3.5:9b).")
 @click.pass_context
-def client_setup(ctx, server_ip, port, non_interactive):
+def client_setup(ctx, server_ip, port, non_interactive, fallback_model):
     """Interactive wizard to connect a client to the GPU server."""
     _require_client_deps()
     from gpu_access_router.client.setup_wizard import run_client_setup
@@ -310,6 +312,7 @@ def client_setup(ctx, server_ip, port, non_interactive):
         port=port,
         non_interactive=non_interactive,
         config_path=ctx.obj.config_path,
+        fallback_model=fallback_model,
     )
 
 

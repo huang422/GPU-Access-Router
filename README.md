@@ -1,6 +1,6 @@
 # GPU Access Router
 
-[![Python](https://img.shields.io/badge/python-3.8%20|%203.12-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-lightgrey)]()
 [![Ollama](https://img.shields.io/badge/ollama-compatible-orange)](https://ollama.com)
@@ -14,8 +14,11 @@ It solves a common problem: you have a powerful GPU machine at home or in the la
 
 ### Key Features
 
-- **Single Python class** — `GPURouter` replaces direct Ollama calls with smart routing
+- **Drop-in `ollama` module** — swap `import ollama` → `from gpu_access_router import ollama` and your code is environment-agnostic with zero other changes
+- **`GPURouter` class** — finer-grained control over routing, fallback, and timeout
 - **Auto-detection** — automatically finds and uses your remote GPU; falls back to local Ollama
+- **`fallback_model`** — when remote fails, automatically retry with a smaller local model
+- **Environment variable control** — switch environments without changing code (`GPU_ROUTER_ROUTING_MODE`, `GPU_ROUTER_SERVER_IP`, `GPU_ROUTER_FALLBACK_MODEL`)
 - **Serial queue** — prevents GPU OOM by processing one inference request at a time
 - **`ollama` CLI shim** — transparently proxies `ollama list`, `ollama run`, etc. to the remote GPU
 - **TOML config** — simple per-environment configuration (great for conda/venv workflows)
@@ -26,21 +29,20 @@ It solves a common problem: you have a powerful GPU machine at home or in the la
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│                      Your Code                           │
-│   from gpu_access_router import GPURouter                │
-│   router = GPURouter()                                   │
-│   response = router.chat("qwen3.5:9b", messages)         │
+│                      Your Code (never changes)           │
+│   from gpu_access_router import ollama                   │
+│   response = ollama.chat("qwen3.5:35b-a3b", messages)        │
 └───────────────────────┬──────────────────────────────────┘
-                        │  auto-route
+                        │  routing decided by env vars / config
           ┌─────────────┴─────────────┐
           ▼                           ▼
  ┌─────────────────┐        ┌─────────────────────┐
  │  Remote GPU     │        │  Local Ollama       │
- │  Server         │        │  (fallback)         │
- │  (Tailscale)    │        │  localhost:11434    │
- │                 │        └─────────────────────┘
- │  FastAPI :8080  │
- │  Serial Queue   │
+ │  Server         │        │  localhost:11434    │
+ │  (Tailscale)    │        │                     │
+ │                 │        │  fallback_model     │
+ │  FastAPI :8080  │   ───► │  (if remote fails)  │
+ │  Serial Queue   │        └─────────────────────┘
  │  + Ollama GPU   │
  └─────────────────┘
 ```
@@ -123,37 +125,71 @@ gpu-access-router client status
 ### 4. Use It
 
 ```python
-from gpu_access_router import GPURouter
+# Drop-in replacement for `import ollama` — works on any environment
+from gpu_access_router import ollama
 
-router = GPURouter()
-response = router.chat(
-    model="qwen3.5:9b",
+response = ollama.chat(
+    model="qwen3.5:35b-a3b",
     messages=[{"role": "user", "content": "What is machine learning?"}]
 )
 print(response.message.content)
 ```
 
-That's it. The router automatically sends inference to your remote GPU. If the server is unreachable, it falls back to local Ollama.
+Routing is controlled by environment variables — no code changes when switching environments:
+
+```bash
+# Local Ollama only
+export GPU_ROUTER_ROUTING_MODE=local
+
+# Remote GPU, auto-fallback to small local model if remote fails
+export GPU_ROUTER_SERVER_IP=100.64.0.5
+export GPU_ROUTER_ROUTING_MODE=auto
+export GPU_ROUTER_FALLBACK_MODEL=qwen3.5:9b
+```
 
 ---
 
 ## Python API
 
-### GPURouter
+### Drop-in `ollama` module (recommended)
+
+```python
+# Replace: import ollama
+# With:
+from gpu_access_router import ollama
+
+# API is identical to the native ollama module
+response = ollama.chat("qwen3.5:35b-a3b", [{"role": "user", "content": "Hello!"}])
+print(response.message.content)
+
+response = ollama.generate("qwen3.5:35b-a3b", "Tell me a joke")
+print(response.response)
+
+models = ollama.list()
+
+# ollama.Client drop-in — accepts routing_mode and fallback_model
+client = ollama.Client(routing_mode="auto", fallback_model="qwen3.5:9b")
+response = client.chat("qwen3.5:35b-a3b", [...])
+```
+
+### GPURouter (lower-level control)
 
 ```python
 from gpu_access_router import GPURouter
 
 router = GPURouter()
 
-# Auto-route (default): remote GPU first, local Ollama fallback
-response = router.chat(model="qwen3.5:9b", messages=[...])
+# Auto-route: remote GPU first, local Ollama fallback
+response = router.chat(model="qwen3.5:35b-a3b", messages=[...])
+
+# With fallback model — if remote fails, use this local model instead
+response = router.chat(model="qwen3.5:35b-a3b", messages=[...], fallback_model="qwen3.5:9b")
 
 # Force remote only (raises GPUAccessRouterConnectionError if unreachable)
-response = router.chat(model="qwen3.5:9b", messages=[...], prefer="remote")
+response = router.chat(model="qwen3.5:35b-a3b", messages=[...], prefer="remote")
 
 # Force local only
-response = router.chat(model="qwen3.5:9b", messages=[...], prefer="local")
+response = router.chat(model="qwen3.5:35b-a3b", messages=[...], prefer="local")
 
 # List models on remote and local
 models = router.list_models()
@@ -176,7 +212,7 @@ from gpu_access_router import (
 
 router = GPURouter()
 try:
-    response = router.chat(model="qwen3.5:9b", messages=[...], prefer="remote")
+    response = router.chat(model="qwen3.5:35b-a3b", messages=[...], prefer="remote")
 except GPUAccessRouterConnectionError:
     print("Server unreachable")
 except GPUAccessRouterTimeoutError:
@@ -230,7 +266,7 @@ gpu-access-router server models [--json]          # List models
 ### Client commands
 
 ```bash
-gpu-access-router client setup [--server-ip IP] [--port PORT]   # Setup wizard
+gpu-access-router client setup [--server-ip IP] [--port PORT] [--fallback-model MODEL]   # Setup wizard
 gpu-access-router client status [--json]                        # Connection status
 gpu-access-router client models [--source remote|local|all]     # List models
 ```
@@ -266,6 +302,7 @@ server_port     = 8080            # GPU Access Router API port
 routing_mode    = "auto"          # "auto" | "remote" | "local"
 timeout_seconds = 300             # Queue wait timeout
 default_model   = ""              # Optional default model
+fallback_model  = "qwen3.5:9b"   # Local model to use when remote fails (optional)
 
 [server]
 ollama_port     = 11434           # Internal Ollama port
@@ -276,6 +313,29 @@ max_queue_depth = 10              # Max queued requests (0 = unlimited)
 [meta]
 role            = "client"        # "client" | "server" | "both"
 version         = "0.1.0"
+```
+
+### Environment variables (override config without editing the file)
+
+| Variable | Description |
+|----------|-------------|
+| `GPU_ROUTER_SERVER_IP` | Remote GPU server Tailscale IP |
+| `GPU_ROUTER_ROUTING_MODE` | `auto` \| `local` \| `remote` |
+| `GPU_ROUTER_FALLBACK_MODEL` | Local model used when remote fails |
+| `GPU_ACCESS_ROUTER_CONFIG` | Path to a custom config file |
+
+```bash
+# Local laptop — only local Ollama
+export GPU_ROUTER_ROUTING_MODE=local
+
+# Remote GPU — prefer remote, fallback to small model if it fails
+export GPU_ROUTER_SERVER_IP=100.64.0.5
+export GPU_ROUTER_ROUTING_MODE=auto
+export GPU_ROUTER_FALLBACK_MODEL=qwen3.5:9b
+
+# Force remote, no fallback
+export GPU_ROUTER_SERVER_IP=100.64.0.5
+export GPU_ROUTER_ROUTING_MODE=remote
 ```
 
 ### Per-environment config (conda / venv)

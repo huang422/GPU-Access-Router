@@ -1,7 +1,6 @@
 """Interactive server setup wizard."""
 
 import json
-import os
 import subprocess
 import sys
 import time
@@ -159,7 +158,8 @@ def run_server_setup(
 
     # Auto-start API server in background
     _step(9, total, "Starting GPU Access Router API server in background…")  # reuse step 9 label
-    _start_api_server_bg(api_port)
+    from gpu_access_router.cli import _start_api_server
+    _start_api_server(api_port)
 
     console.print("\n[bold green]✓ Server setup complete![/bold green]")
     if tailscale_ip:
@@ -203,32 +203,6 @@ def _get_tailscale_ip() -> Optional[str]:
         pass
     return None
 
-
-def _start_api_server_bg(api_port: int) -> None:
-    from gpu_access_router.core.constants import CONFIG_PATH
-    pid_path = CONFIG_PATH.parent / "server.pid"
-    log_path = CONFIG_PATH.parent / "server.log"
-
-    # Check if already running
-    if pid_path.exists():
-        try:
-            pid = int(pid_path.read_text().strip())
-            os.kill(pid, 0)
-            _ok(f"API server already running (PID {pid}, port {api_port}).")
-            return
-        except (ProcessLookupError, OSError):
-            pid_path.unlink(missing_ok=True)
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a") as log:
-        proc = subprocess.Popen(
-            [sys.executable, "-m", "gpu_access_router", "server", "serve", "--port", str(api_port)],
-            stdout=log, stderr=log,
-            start_new_session=True,
-        )
-    pid_path.write_text(str(proc.pid))
-    _ok(f"API server started in background (PID {proc.pid}, port {api_port}).")
-    console.print(f"  Logs: {log_path}")
 
 
 def _confirm(prompt: str) -> bool:

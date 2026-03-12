@@ -16,6 +16,7 @@ import tomli_w
 from gpu_access_router.core.constants import (
     CONFIG_PATH,
     DEFAULT_API_PORT,
+    DEFAULT_FALLBACK_MODEL,
     DEFAULT_PORT,
     DEFAULT_QUEUE_DEPTH,
     DEFAULT_ROUTING_MODE,
@@ -25,6 +26,14 @@ from gpu_access_router.core.exceptions import GPUAccessRouterConfigError
 
 VALID_ROUTING_MODES = {"auto", "remote", "local"}
 
+# Environment variables that override individual config fields.
+# Maps env var name → (section, key).
+_ENV_OVERRIDES = {
+    "GPU_ROUTER_SERVER_IP":      ("client", "server_ip"),
+    "GPU_ROUTER_ROUTING_MODE":   ("client", "routing_mode"),
+    "GPU_ROUTER_FALLBACK_MODEL": ("client", "fallback_model"),
+}
+
 _DEFAULT_CONFIG: Dict[str, Any] = {
     "client": {
         "server_ip": "",
@@ -32,6 +41,7 @@ _DEFAULT_CONFIG: Dict[str, Any] = {
         "routing_mode": DEFAULT_ROUTING_MODE,
         "timeout_seconds": DEFAULT_TIMEOUT,
         "default_model": "",
+        "fallback_model": DEFAULT_FALLBACK_MODEL,
     },
     "server": {
         "ollama_port": DEFAULT_PORT,
@@ -65,18 +75,31 @@ def create_default_config() -> Dict[str, Any]:
 
 
 def load_config(path: Optional[str] = None) -> Dict[str, Any]:
-    """Load config from TOML file; create default if missing."""
+    """Load config from TOML file; create default if missing.
+
+    Environment variables override individual fields after the file is loaded:
+      GPU_ROUTER_SERVER_IP       → client.server_ip
+      GPU_ROUTER_ROUTING_MODE    → client.routing_mode
+      GPU_ROUTER_FALLBACK_MODEL  → client.fallback_model
+    """
     config_path = _resolve_path(path)
     if not config_path.exists():
         cfg = create_default_config()
         save_config(cfg, path)
-        return cfg
-    try:
-        with open(config_path, "rb") as f:
-            data = tomllib.load(f)
-        return data
-    except Exception as exc:
-        raise GPUAccessRouterConfigError(f"Failed to read config at {config_path}: {exc}") from exc
+    else:
+        try:
+            with open(config_path, "rb") as f:
+                cfg = tomllib.load(f)
+        except Exception as exc:
+            raise GPUAccessRouterConfigError(f"Failed to read config at {config_path}: {exc}") from exc
+
+    # Apply environment variable overrides (do not persist to file).
+    for env_var, (section, key) in _ENV_OVERRIDES.items():
+        value = os.environ.get(env_var)
+        if value is not None:
+            cfg.setdefault(section, {})[key] = value
+
+    return cfg
 
 
 def save_config(data: Dict[str, Any], path: Optional[str] = None) -> None:
@@ -103,24 +126,32 @@ def get(key: str, default: Any = None, path: Optional[str] = None) -> Any:
 
 
 def set_value(key: str, value: Any, path: Optional[str] = None) -> None:
-    """Set a config value by dotted key (e.g. 'client.routing_mode')."""
+    """Set a config value by dotted key (e.g. 'client.routing_mode').
+
+    Validates the key against the default config schema so that new fields
+    added to defaults (e.g. ``client.fallback_model``) are always settable,
+    even if an existing config file pre-dates the field.
+    """
     data = load_config(path)
     parts = key.split(".")
     if len(parts) < 2:
         raise GPUAccessRouterConfigError(f"Invalid config key '{key}'. Use section.field format.")
 
-    node = data
-    for part in parts[:-1]:
-        if part not in node:
-            raise GPUAccessRouterConfigError(f"Unknown config section '{part}'.")
-        node = node[part]
+    section, leaf = parts[0], parts[-1]
 
-    leaf = parts[-1]
-    if leaf not in node:
+    # Use the default config as the authoritative schema.
+    default_section = _DEFAULT_CONFIG.get(section)
+    if default_section is None:
+        raise GPUAccessRouterConfigError(f"Unknown config section '{section}'.")
+    if leaf not in default_section:
         raise GPUAccessRouterConfigError(f"Unknown config key '{key}'.")
 
-    coerced = _coerce(key, leaf, value, node[leaf])
-    node[leaf] = coerced
+    # Ensure the section exists in the loaded config.
+    data.setdefault(section, {})
+    existing = data[section].get(leaf, default_section[leaf])
+
+    coerced = _coerce(key, leaf, value, existing)
+    data[section][leaf] = coerced
     validate_config(data)
     save_config(data, path)
 

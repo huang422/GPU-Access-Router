@@ -26,6 +26,7 @@ def run_client_setup(
     port: int = DEFAULT_API_PORT,
     non_interactive: bool = False,
     config_path: Optional[str] = None,
+    fallback_model: Optional[str] = None,
 ) -> None:
     """Execute client setup wizard."""
     from gpu_access_router.client.connectivity import (
@@ -38,7 +39,7 @@ def run_client_setup(
     console.print("\n[bold]GPU Access Router — Client Setup Wizard[/bold]\n")
 
     # Step 1: Check Tailscale installed
-    console.print("[bold cyan]Step 1/8:[/bold cyan] Checking Tailscale installation…")
+    console.print("[bold cyan]Step 1/9:[/bold cyan] Checking Tailscale installation…")
     if not check_tailscale_installed():
         _fail(
             "Tailscale not installed.",
@@ -53,7 +54,7 @@ def run_client_setup(
         _ok("Tailscale is installed.")
 
         # Step 2: Check Tailscale connected
-        console.print("[bold cyan]Step 2/8:[/bold cyan] Checking Tailscale connection…")
+        console.print("[bold cyan]Step 2/9:[/bold cyan] Checking Tailscale connection…")
         ts = check_tailscale_connected()
         if not ts["connected"]:
             _fail("Tailscale not connected.", "Run: sudo tailscale up")
@@ -65,7 +66,7 @@ def run_client_setup(
             _ok(f"Tailscale connected. Your IP: {ts.get('own_ip', 'unknown')}")
 
     # Step 3: Get server IP
-    console.print("[bold cyan]Step 3/8:[/bold cyan] Server IP address")
+    console.print("[bold cyan]Step 3/9:[/bold cyan] Server IP address")
     if not server_ip:
         if non_interactive:
             err_console.print("[red]Error:[/red] --server-ip required in non-interactive mode.")
@@ -77,7 +78,7 @@ def run_client_setup(
     _ok(f"Using server IP: {server_ip}")
 
     # Step 4: TCP probe
-    console.print(f"[bold cyan]Step 4/8:[/bold cyan] Probing {server_ip}:{port}…")
+    console.print(f"[bold cyan]Step 4/9:[/bold cyan] Probing {server_ip}:{port}…")
     if not probe_server(server_ip, port, timeout=5):
         _fail(
             f"Cannot reach {server_ip}:{port}.",
@@ -91,7 +92,7 @@ def run_client_setup(
         _ok(f"Server at {server_ip}:{port} is reachable.")
 
     # Step 5: Query models
-    console.print("[bold cyan]Step 5/8:[/bold cyan] Fetching available models…")
+    console.print("[bold cyan]Step 5/9:[/bold cyan] Fetching available models…")
     models = query_server_models(server_ip, port)
     if models:
         _ok(f"Available models: {', '.join(models)}")
@@ -99,7 +100,7 @@ def run_client_setup(
         console.print("  [yellow]⚠[/yellow] Could not fetch model list (server may be warming up).")
 
     # Step 6: Routing mode
-    console.print("[bold cyan]Step 6/8:[/bold cyan] Routing mode")
+    console.print("[bold cyan]Step 6/9:[/bold cyan] Routing mode")
     routing_mode = DEFAULT_ROUTING_MODE
     if not non_interactive:
         console.print("  Options: [bold]auto[/bold] (default), remote, local")
@@ -110,8 +111,20 @@ def run_client_setup(
             console.print(f"  [yellow]Unknown mode '{choice}', using '{DEFAULT_ROUTING_MODE}'.[/yellow]")
     _ok(f"Routing mode: {routing_mode}")
 
-    # Step 7: Write config
-    console.print("[bold cyan]Step 7/8:[/bold cyan] Saving configuration…")
+    # Step 7: Fallback model
+    console.print("[bold cyan]Step 7/9:[/bold cyan] Fallback model")
+    console.print("  Used when the remote request fails and the model is not available locally.")
+    if fallback_model is None and not non_interactive:
+        from gpu_access_router.client.connectivity import query_local_models
+        local_models = query_local_models() or []
+        if local_models:
+            console.print(f"  Local models detected: {', '.join(local_models)}")
+        fallback_model = input("  Fallback model (leave empty to skip): ").strip() or ""
+    fallback_model = fallback_model or ""
+    _ok(f"Fallback model: {fallback_model or '(none)'}")
+
+    # Step 8: Write config
+    console.print("[bold cyan]Step 8/9:[/bold cyan] Saving configuration…")
     from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(config_path)
     cfg.setdefault("client", {})
@@ -119,17 +132,17 @@ def run_client_setup(
     cfg["client"]["server_port"] = port
     cfg["client"]["routing_mode"] = routing_mode
     cfg["client"]["timeout_seconds"] = DEFAULT_TIMEOUT
+    cfg["client"]["fallback_model"] = fallback_model
     cfg.setdefault("meta", {})["role"] = "client"
     cfg_mod.save_config(cfg, config_path)
     _ok("Configuration saved.")
 
-    # Step 8: Print summary
-    console.print("[bold cyan]Step 8/8:[/bold cyan] Done!\n")
+    # Step 9: Print summary
+    console.print("[bold cyan]Step 9/9:[/bold cyan] Done!\n")
     console.print("[bold green]✓ Client setup complete![/bold green]\n")
     console.print("Quick start:")
-    console.print("  [bold]from gpu_access_router import GPURouter[/bold]")
-    console.print("  [bold]router = GPURouter()[/bold]")
-    console.print('  [bold]response = router.chat("llama3.2", [{"role": "user", "content": "Hello!"}])[/bold]')
+    console.print("  [bold]from gpu_access_router import ollama[/bold]")
+    console.print('  [bold]response = ollama.chat("llama3.2", [{"role": "user", "content": "Hello!"}])[/bold]')
     console.print("  [bold]print(response.message.content)[/bold]")
     console.print("\nCheck status: [bold]gpu-access-router client status[/bold]")
 
