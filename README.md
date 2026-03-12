@@ -1,6 +1,6 @@
 # GPU Access Router
 
-[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-≥3.8-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-lightgrey)]()
 [![Ollama](https://img.shields.io/badge/ollama-compatible-orange)](https://ollama.com)
@@ -31,7 +31,7 @@ It solves a common problem: you have a powerful GPU machine at home or in the la
 ┌──────────────────────────────────────────────────────────┐
 │                      Your Code (never changes)           │
 │   from gpu_access_router import ollama                   │
-│   response = ollama.chat("qwen3.5:35b-a3b", messages)        │
+│   response = ollama.chat("qwen3.5:35b-a3b", messages)    │
 └───────────────────────┬──────────────────────────────────┘
                         │  routing decided by env vars / config
           ┌─────────────┴─────────────┐

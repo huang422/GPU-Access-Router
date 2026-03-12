@@ -36,8 +36,8 @@ def run_server_setup(
     non_interactive: bool = False,
     config_path: Optional[str] = None,
 ) -> None:
-    """Execute 9-step server setup wizard."""
-    total = 9
+    """Execute 10-step server setup wizard."""
+    total = 10
     console.print("\n[bold]GPU Access Router — Server Setup Wizard[/bold]\n")
 
     # Step 1: Check Docker
@@ -157,7 +157,7 @@ def run_server_setup(
     _ok("Configuration saved.")
 
     # Auto-start API server in background
-    _step(9, total, "Starting GPU Access Router API server in background…")  # reuse step 9 label
+    _step(10, total, "Starting GPU Access Router API server in background…")
     from gpu_access_router.cli import _start_api_server
     _start_api_server(api_port)
 
@@ -202,7 +202,6 @@ def _get_tailscale_ip() -> Optional[str]:
     except Exception:
         pass
     return None
-
 
 
 def _confirm(prompt: str) -> bool:

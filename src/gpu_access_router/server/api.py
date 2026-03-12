@@ -3,6 +3,7 @@
 import asyncio
 import json
 import urllib.request
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 try:
@@ -24,8 +25,6 @@ except ImportError as exc:
 from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 from gpu_access_router.server.queue import SerialQueue
 
-app = FastAPI(title="GPU Access Router Server", version="0.1.0")
-
 _serial_queue: Optional[SerialQueue] = None
 _ollama_port: int = DEFAULT_PORT
 
@@ -42,11 +41,11 @@ class ChatRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Startup
+# Lifespan (startup / shutdown)
 # ---------------------------------------------------------------------------
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global _serial_queue, _ollama_port
     from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config()
@@ -78,6 +77,10 @@ async def startup_event():
     _serial_queue.set_ollama_callable(_ollama_call)
     _serial_queue.set_unload_callable(_unload_model)
     _serial_queue.start()
+    yield
+
+
+app = FastAPI(title="GPU Access Router Server", version="0.1.0", lifespan=lifespan)
 
 
 def _chat_response_to_dict(resp) -> Dict:

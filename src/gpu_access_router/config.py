@@ -158,17 +158,18 @@ def set_value(key: str, value: Any, path: Optional[str] = None) -> None:
 
 def _coerce(full_key: str, leaf: str, value: Any, existing: Any) -> Any:
     """Coerce string value from CLI to the correct type."""
-    if isinstance(existing, int):
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            raise GPUAccessRouterConfigError(f"'{full_key}' must be an integer, got '{value}'.")
+    # bool must be checked before int because bool is a subclass of int in Python.
     if isinstance(existing, bool):
         if str(value).lower() in ("true", "1", "yes"):
             return True
         if str(value).lower() in ("false", "0", "no"):
             return False
         raise GPUAccessRouterConfigError(f"'{full_key}' must be a boolean.")
+    if isinstance(existing, int):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise GPUAccessRouterConfigError(f"'{full_key}' must be an integer, got '{value}'.")
     return str(value)
 
 

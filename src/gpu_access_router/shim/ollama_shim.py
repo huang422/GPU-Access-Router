@@ -266,9 +266,10 @@ def main():
         if subcmd == "show" and len(args) >= 2:
             sys.exit(_cmd_show(args[1], server_ip, server_port))
 
-        # ollama run <model> <prompt>  — non-interactive single-shot
+        # ollama run <model> <prompt...>  — non-interactive single-shot
         if subcmd == "run" and len(args) >= 3:
-            sys.exit(_cmd_run_remote(args[1], args[2]))
+            prompt = " ".join(args[2:])
+            sys.exit(_cmd_run_remote(args[1], prompt))
 
         # --- Write/manage commands: must run on server ---
         if subcmd in ("pull", "push", "rm", "stop", "cp", "create", "serve"):
