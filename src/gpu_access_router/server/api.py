@@ -125,12 +125,7 @@ def _chat_response_to_dict(resp) -> Dict:
 @app.get("/gd/health")
 async def health():
     queue_depth = await _serial_queue.get_depth() if _serial_queue else 0
-    has_gd_processing = any(
-        r.status == "processing"
-        for r in (_serial_queue._pending.values() if _serial_queue else [])
-    )
-    has_proxy_active = bool(_serial_queue._active_slots) if _serial_queue else False
-    processing = has_gd_processing or has_proxy_active
+    processing = _serial_queue.is_processing() if _serial_queue else False
     ollama_ok = _check_ollama_reachable(_ollama_port)
     uptime = _serial_queue.get_uptime() if _serial_queue else 0.0
     return {
@@ -192,12 +187,8 @@ async def get_queue():
     if _serial_queue is None:
         return {"depth": 0, "max_depth": 0, "processing": False, "requests": []}
     depth = await _serial_queue.get_depth()
-    processing = any(r.status == "processing" for r in _serial_queue._pending.values())
-    requests = [
-        {"request_id": r.request_id, "position": r.queue_position, "model": r.model}
-        for r in _serial_queue._pending.values()
-        if r.status == "waiting"
-    ]
+    processing = _serial_queue.is_processing()
+    requests = _serial_queue.get_waiting_requests()
     return {"depth": depth, "max_depth": _serial_queue.max_depth, "processing": processing, "requests": requests}
 
 

@@ -18,7 +18,7 @@ def get_client_status(config_path: Optional[str] = None) -> Dict[str, Any]:
     cfg = cfg_mod.load_config(config_path)
     client_cfg = cfg.get("client", {})
     server_ip = client_cfg.get("server_ip", "")
-    server_port = client_cfg.get("server_port", DEFAULT_API_PORT)
+    server_port = int(client_cfg.get("server_port", DEFAULT_API_PORT))
     routing_mode = client_cfg.get("routing_mode", "auto")
 
     # Remote status

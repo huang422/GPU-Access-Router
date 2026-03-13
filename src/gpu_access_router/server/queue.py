@@ -90,6 +90,19 @@ class SerialQueue:
     def get_uptime(self) -> float:
         return _now_ts() - self._started_at
 
+    def is_processing(self) -> bool:
+        """Return True if any request is currently being processed (gd or proxy)."""
+        has_gd = any(r.status == "processing" for r in self._pending.values())
+        return has_gd or bool(self._active_slots)
+
+    def get_waiting_requests(self) -> list:
+        """Return list of waiting request summaries for queue inspection."""
+        return [
+            {"request_id": r.request_id, "position": r.queue_position, "model": r.model}
+            for r in self._pending.values()
+            if r.status == "waiting"
+        ]
+
     async def get_status(self, request_id: str) -> Optional[Dict[str, Any]]:
         """Return a status snapshot for the given request_id."""
         req = self._pending.get(request_id)
@@ -146,8 +159,7 @@ class SerialQueue:
             # Acquire GPU semaphore (shared with streaming slots)
             await self._gpu_semaphore.acquire()
 
-            import time
-            req.started_at = time.time()
+            req.started_at = _now_ts()
             req.status = "processing"
             req.queue_position = 0
             self._recalculate_positions()
