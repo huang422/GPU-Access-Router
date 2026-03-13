@@ -45,3 +45,9 @@ htmlcov/
 
 # Logs
 *.log
+
+# Spec / Claude / Speckit
+.claude/
+.specify/
+specs/
+CLAUDE.md

@@ -49,6 +49,12 @@ class SerialQueue:
         self._task: Optional[asyncio.Task] = None
         self._started_at: float = _now_ts()
 
+        # Semaphore for streaming slot acquisition (shared with _process_loop)
+        self._gpu_semaphore: asyncio.Semaphore = asyncio.Semaphore(1)
+
+        # Track active proxy slots for accurate depth counting
+        self._active_slots: set = set()
+
     def set_ollama_callable(self, callable_: Callable) -> None:
         self._ollama_callable = callable_
 
@@ -74,11 +80,12 @@ class SerialQueue:
         return req
 
     async def get_depth(self) -> int:
-        """Return number of active (waiting + processing) requests."""
-        return sum(
+        """Return number of active (waiting + processing) requests, including proxy slots."""
+        gd_depth = sum(
             1 for r in self._pending.values()
             if r.status in ("waiting", "processing")
         )
+        return gd_depth + len(self._active_slots)
 
     def get_uptime(self) -> float:
         return _now_ts() - self._started_at
@@ -103,7 +110,29 @@ class SerialQueue:
         return out
 
     # ------------------------------------------------------------------
-    # Background worker
+    # Streaming slot acquisition (for /api/* proxy endpoints)
+    # ------------------------------------------------------------------
+
+    async def acquire_slot(self, model: str = "") -> str:
+        """Wait for exclusive GPU access. Returns a slot_id. Call release_slot() when done."""
+        depth = await self.get_depth()
+        if self.max_depth > 0 and depth >= self.max_depth:
+            raise RuntimeError(f"Queue full ({depth}/{self.max_depth})")
+        await self._gpu_semaphore.acquire()
+        slot_id = str(uuid.uuid4())
+        self._active_slots.add(slot_id)
+        self._current_model = model or self._current_model
+        return slot_id
+
+    def release_slot(self, slot_id: str) -> None:
+        """Release exclusive GPU access so the next request can proceed."""
+        if slot_id not in self._active_slots:
+            return  # Already released or invalid — prevent double-release
+        self._active_slots.discard(slot_id)
+        self._gpu_semaphore.release()
+
+    # ------------------------------------------------------------------
+    # Background worker (for /gd/chat blocking endpoint)
     # ------------------------------------------------------------------
 
     async def _process_loop(self) -> None:
@@ -113,6 +142,9 @@ class SerialQueue:
             if req.request_id not in self._pending:
                 self._queue.task_done()
                 continue
+
+            # Acquire GPU semaphore (shared with streaming slots)
+            await self._gpu_semaphore.acquire()
 
             import time
             req.started_at = time.time()
@@ -152,6 +184,7 @@ class SerialQueue:
                 req.status = "error"
                 req.error = str(exc)
             finally:
+                self._gpu_semaphore.release()
                 req.done_event.set()          # wake up any waiters
                 self._queue.task_done()
                 asyncio.create_task(self._cleanup_after(req.request_id, delay=300))

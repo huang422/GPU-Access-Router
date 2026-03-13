@@ -1,13 +1,15 @@
-"""FastAPI server exposing /gd/* endpoints with serial queue."""
+"""FastAPI server exposing /gd/* endpoints and Ollama-compatible /api/* proxy with serial queue."""
 
 import asyncio
 import json
+import logging
 import urllib.request
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
 try:
-    from fastapi import FastAPI, HTTPException
+    from fastapi import FastAPI, HTTPException, Request
+    from fastapi.responses import StreamingResponse
     import uvicorn
     from pydantic import BaseModel
 except ImportError as exc:
@@ -22,11 +24,19 @@ except ImportError as exc:
         "Server dependencies not installed. Install with: pip install gpu-access-router[server]"
     ) from exc
 
+try:
+    import httpx
+except ImportError:
+    httpx = None  # type: ignore[assignment]
+
 from gpu_access_router.core.constants import DEFAULT_API_PORT, DEFAULT_PORT, DEFAULT_QUEUE_DEPTH, DEFAULT_TIMEOUT
 from gpu_access_router.server.queue import SerialQueue
 
+logger = logging.getLogger("gpu_access_router.server")
+
 _serial_queue: Optional[SerialQueue] = None
 _ollama_port: int = DEFAULT_PORT
+_httpx_client: Optional["httpx.AsyncClient"] = None
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +56,7 @@ class ChatRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _serial_queue, _ollama_port
+    global _serial_queue, _ollama_port, _httpx_client
     from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config()
     _ollama_port = cfg.get("server", {}).get("ollama_port", DEFAULT_PORT)
@@ -77,7 +87,19 @@ async def lifespan(app: FastAPI):
     _serial_queue.set_ollama_callable(_ollama_call)
     _serial_queue.set_unload_callable(_unload_model)
     _serial_queue.start()
+
+    # Initialize httpx client for Ollama-compatible proxy endpoints
+    if httpx is not None:
+        _httpx_client = httpx.AsyncClient(
+            base_url=f"http://localhost:{_ollama_port}",
+            timeout=httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0),
+        )
+
     yield
+
+    # Cleanup
+    if _httpx_client is not None:
+        await _httpx_client.aclose()
 
 
 app = FastAPI(title="GPU Access Router Server", version="0.1.0", lifespan=lifespan)
@@ -103,10 +125,12 @@ def _chat_response_to_dict(resp) -> Dict:
 @app.get("/gd/health")
 async def health():
     queue_depth = await _serial_queue.get_depth() if _serial_queue else 0
-    processing = any(
+    has_gd_processing = any(
         r.status == "processing"
         for r in (_serial_queue._pending.values() if _serial_queue else [])
     )
+    has_proxy_active = bool(_serial_queue._active_slots) if _serial_queue else False
+    processing = has_gd_processing or has_proxy_active
     ollama_ok = _check_ollama_reachable(_ollama_port)
     uptime = _serial_queue.get_uptime() if _serial_queue else 0.0
     return {
@@ -186,6 +210,146 @@ async def list_models():
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
     return {"models": data.get("models", [])}
+
+
+# ---------------------------------------------------------------------------
+# Ollama-compatible proxy endpoints (/api/*)
+# ---------------------------------------------------------------------------
+
+def _ensure_proxy_ready():
+    """Check that httpx client and queue are available."""
+    if httpx is None:
+        raise HTTPException(
+            status_code=503,
+            detail="httpx not installed. Install with: pip install gpu-access-router[server]",
+        )
+    if _httpx_client is None:
+        raise HTTPException(status_code=503, detail="Proxy client not initialized.")
+    if _serial_queue is None:
+        raise HTTPException(status_code=503, detail="Queue not initialized.")
+
+
+async def _proxy_inference(request: Request, ollama_path: str):
+    """
+    Proxy an inference request to local Ollama with serial queue protection.
+
+    Supports both streaming (NDJSON) and non-streaming (JSON) modes.
+    All request fields are forwarded as-is (pass-through).
+    """
+    _ensure_proxy_ready()
+
+    body = await request.body()
+    try:
+        payload = json.loads(body) if body else {}
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    model = payload.get("model", "unknown")
+    is_streaming = payload.get("stream", True)  # Ollama defaults to stream=true
+
+    # Check queue depth before acquiring slot
+    depth = await _serial_queue.get_depth()
+    max_depth = _serial_queue.max_depth
+    if max_depth > 0 and depth >= max_depth:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Queue full ({depth}/{max_depth}). Try again later.",
+        )
+
+    # Acquire exclusive GPU slot (waits if another request is in progress)
+    slot_id = await _serial_queue.acquire_slot(model=model)
+
+    if is_streaming:
+        return StreamingResponse(
+            _stream_proxy(slot_id, ollama_path, body),
+            media_type="application/x-ndjson",
+        )
+    else:
+        # Non-streaming: forward, wait for full response, release slot
+        try:
+            resp = await _httpx_client.post(
+                ollama_path,
+                content=body,
+                headers={"Content-Type": "application/json"},
+            )
+            return _make_json_response(resp)
+        except httpx.ConnectError:
+            raise HTTPException(status_code=503, detail="Ollama service unavailable")
+        except httpx.TimeoutException:
+            raise HTTPException(status_code=408, detail="Ollama request timed out")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Proxy error: {exc}")
+        finally:
+            _serial_queue.release_slot(slot_id)
+
+
+async def _stream_proxy(slot_id: str, ollama_path: str, body: bytes):
+    """Generator that streams NDJSON from Ollama, releasing the slot when done."""
+    try:
+        async with _httpx_client.stream(
+            "POST",
+            ollama_path,
+            content=body,
+            headers={"Content-Type": "application/json"},
+        ) as upstream:
+            if upstream.status_code != 200:
+                error_body = await upstream.aread()
+                yield json.dumps({"error": f"Ollama returned {upstream.status_code}: {error_body[:500].decode(errors='replace')}"}) + "\n"
+                return
+
+            async for line in upstream.aiter_lines():
+                if line:
+                    yield line + "\n"
+    except httpx.ConnectError:
+        yield json.dumps({"error": "Ollama service unavailable"}) + "\n"
+    except httpx.TimeoutException:
+        yield json.dumps({"error": "Ollama request timed out"}) + "\n"
+    except Exception as exc:
+        yield json.dumps({"error": f"Proxy error: {exc}"}) + "\n"
+    finally:
+        _serial_queue.release_slot(slot_id)
+
+
+def _make_json_response(resp):
+    """Convert httpx response to a FastAPI-compatible dict response."""
+    try:
+        return resp.json()
+    except Exception:
+        raise HTTPException(
+            status_code=resp.status_code,
+            detail=resp.text[:500] if resp.text else "Unknown Ollama error",
+        )
+
+
+@app.post("/api/generate")
+async def proxy_generate(request: Request):
+    """Ollama-compatible /api/generate proxy with serial queue protection."""
+    return await _proxy_inference(request, "/api/generate")
+
+
+@app.post("/api/chat")
+async def proxy_chat(request: Request):
+    """Ollama-compatible /api/chat proxy with serial queue protection."""
+    return await _proxy_inference(request, "/api/chat")
+
+
+@app.get("/api/tags")
+async def proxy_tags():
+    """Ollama-compatible /api/tags proxy (no queue needed — read-only)."""
+    if httpx is None or _httpx_client is None:
+        # Fallback to urllib if httpx not available
+        url = f"http://localhost:{_ollama_port}/api/tags"
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                return json.loads(resp.read())
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
+
+    try:
+        resp = await _httpx_client.get("/api/tags")
+        return resp.json()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
 
 
 # ---------------------------------------------------------------------------
