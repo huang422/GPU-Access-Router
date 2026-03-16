@@ -11,5 +11,6 @@ from gpu_access_router.core.exceptions import (  # noqa: F401
 
 try:
     from gpu_access_router.client.router import GPURouter  # noqa: F401
+    from gpu_access_router.ollama import AsyncClient, Client  # noqa: F401
 except ImportError:
-    pass  # ollama not installed; GPURouter requires [client] extra
+    pass  # ollama not installed; GPURouter/Client/AsyncClient require [client] extra

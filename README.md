@@ -47,6 +47,72 @@ It solves a common problem: you have a powerful GPU machine at home or in the la
  └─────────────────┘
 ```
 
+### Key Technical Design
+
+<details>
+<summary><strong>Serial Queue — GPU OOM Prevention</strong></summary>
+
+Consumer GPUs (RTX 3090/4090, 24GB VRAM) crash when multiple inference requests run concurrently. The Serial Queue uses an `asyncio.Semaphore(1)` to ensure **exactly one request uses the GPU at a time**:
+
+```
+Client A ──┐
+Client B ──┤──► SerialQueue (FIFO) ──► [Semaphore(1)] ──► Ollama GPU ──► Response
+Client C ──┘
+```
+
+The server exposes two API styles that **share the same GPU semaphore**:
+
+| Endpoint | Mode | Use Case |
+|----------|------|----------|
+| `/gd/chat` | Blocking | `GPURouter.chat()` — request enqueues, waits for `done_event`, returns full result |
+| `/api/chat`, `/api/generate` | Streaming proxy | `AsyncClient` — acquires GPU slot, streams NDJSON via httpx, releases slot on completion |
+
+Both paths are mutually exclusive — a streaming `/api/chat` blocks `/gd/chat` and vice versa.
+
+</details>
+
+<details>
+<summary><strong>Model Hot-Swap & VRAM Management</strong></summary>
+
+The queue tracks the currently loaded model (`_current_model`). When the next request uses a different model:
+
+1. Calls `ollama.generate(model=old_model, prompt="", keep_alive=0)` to unload the old model from VRAM
+2. Then proceeds with the new model inference
+
+This prevents two models from occupying VRAM simultaneously.
+
+</details>
+
+<details>
+<summary><strong>Sync (Streaming Proxy) Flow</strong></summary>
+
+The `/api/*` endpoints act as a transparent Ollama-compatible proxy with queue protection:
+
+1. Client sends standard Ollama request (e.g., `POST /api/chat`)
+2. Server checks queue depth against `max_queue_depth`
+3. `acquire_slot()` waits for the GPU semaphore
+4. httpx streams the request to local Ollama (`:11434`)
+5. Each NDJSON chunk is forwarded to the client in real-time
+6. On stream completion (or error), `release_slot()` frees the semaphore
+
+This means any Ollama-compatible client can connect to the server and get queue-protected GPU access without code changes — just point it to `http://<server-ip>:8080` instead of `localhost:11434`.
+
+</details>
+
+<details>
+<summary><strong>4-Step Routing Decision Tree (Auto Mode)</strong></summary>
+
+When `routing_mode=auto`, the client resolves the target using this logic:
+
+1. **Probe remote** — TCP connect to `server_ip:server_port`
+2. **Check remote models** — Query `/gd/models` for the requested model
+3. **If model not on remote** — Check if local Ollama has it → route locally
+4. **If remote unreachable** — Fall back to local Ollama silently
+
+If `fallback_model` is configured, connection failures trigger an automatic retry with the fallback model on the local Ollama.
+
+</details>
+
 ### Architecture: Two Roles
 
 | Role             | Machine                        | What it does                                                                                       |
@@ -151,7 +217,7 @@ export GPU_ROUTER_FALLBACK_MODEL=qwen3.5:9b
 
 ## Python API
 
-### Drop-in `ollama` module (recommended)
+### Drop-in `ollama` module — Sync (recommended for scripts)
 
 ```python
 # Replace: import ollama
@@ -171,6 +237,79 @@ models = ollama.list()
 client = ollama.Client(routing_mode="auto", fallback_model="qwen3.5:9b")
 response = client.chat("qwen3.5:35b-a3b", [...])
 ```
+
+### AsyncClient — Async (recommended for web apps & bots)
+
+Drop-in replacement for `ollama.AsyncClient` with automatic routing and fallback.
+Install: `pip install "gpu-access-router[client]"`
+
+```python
+# Replace: from ollama import AsyncClient
+# With:
+from gpu_access_router.ollama import AsyncClient
+
+async with AsyncClient() as client:
+    # Streaming
+    response = await client.generate("qwen3.5:9b", "Hello", stream=True)
+    async for chunk in response:
+        print(chunk.response, end="")
+
+    # Non-streaming
+    resp = await client.generate("qwen3.5:9b", "Hello")
+    print(resp.response)
+
+    # Think mode (reasoning models)
+    resp = await client.generate("qwen3.5:35b-a3b", "Analyze ML trends", think=True)
+    print(resp.thinking)  # reasoning content
+    print(resp.response)  # final answer
+
+    # Multimodal (vision models)
+    resp = await client.generate(
+        "qwen3.5:35b-a3b", "Describe this image",
+        images=[base64_data], think=False,
+    )
+
+    # All Ollama parameters pass through: system, options, format, etc.
+    resp = await client.generate(
+        "qwen3.5:35b-a3b", "Explain quantum computing",
+        system="You are a physics professor.",
+        options={"num_predict": 6144, "temperature": 0.7, "num_ctx": 8192},
+    )
+
+    # List models
+    models = await client.list()
+```
+
+**Constructor options:**
+
+```python
+client = AsyncClient(
+    routing_mode="auto",          # "auto" | "remote" | "local" (default: from config)
+    fallback_model="qwen3.5:9b",  # Local model when remote fails (default: from config)
+    timeout=300,                  # Queue timeout in seconds (default: from config)
+)
+```
+
+**Module-level async functions:**
+
+```python
+from gpu_access_router import ollama
+
+# One-liner async calls (use a shared singleton client)
+resp = await ollama.agenerate("qwen3.5:9b", "Hello", stream=True)
+resp = await ollama.achat("qwen3.5:35b-a3b", [{"role": "user", "content": "Hi"}])
+models = await ollama.alist()
+```
+
+**How routing works:**
+
+| Scenario | Behaviour |
+|----------|-----------|
+| Remote GPU reachable + model available | Routes to remote GPU |
+| Remote GPU reachable + model NOT available but local has it | Routes to local Ollama |
+| Remote GPU unreachable + local Ollama running | Falls back to local Ollama |
+| Remote fails mid-request + `fallback_model` set | Retries with fallback model on local |
+| Nothing available | Raises `GPUAccessRouterConnectionError` |
 
 ### GPURouter (lower-level control)
 
