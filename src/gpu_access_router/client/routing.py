@@ -93,3 +93,46 @@ def resolve_route(
     raise GPUAccessRouterConnectionError(
         "No routing target available. Remote server is unreachable and local Ollama is not running."
     )
+
+
+def resolve_list_route(
+    config: Dict[str, Any],
+    prefer: Optional[str] = None,
+) -> str:
+    """Return 'remote' or 'local' for list() calls that do not specify a model."""
+    from gpu_access_router.client.connectivity import probe_server, query_local_models
+
+    client_cfg = config.get("client", {})
+    server_ip = client_cfg.get("server_ip", "")
+    server_port = int(client_cfg.get("server_port", DEFAULT_API_PORT))
+    routing_mode = prefer or client_cfg.get("routing_mode", "auto")
+
+    if routing_mode == "remote":
+        if not server_ip:
+            raise GPUAccessRouterConnectionError(
+                "routing_mode is 'remote' but no server_ip configured. "
+                "Run: gpu-access-router client setup"
+            )
+        if not probe_server(server_ip, server_port):
+            raise GPUAccessRouterConnectionError(
+                f"routing_mode is 'remote' but server {server_ip}:{server_port} is unreachable."
+            )
+        return "remote"
+
+    if routing_mode == "local":
+        local_models = query_local_models()
+        if local_models is None:
+            raise GPUAccessRouterConnectionError(
+                "routing_mode is 'local' but local Ollama is not reachable at http://localhost:11434."
+            )
+        return "local"
+
+    if server_ip and probe_server(server_ip, server_port):
+        return "remote"
+
+    if query_local_models() is not None:
+        return "local"
+
+    raise GPUAccessRouterConnectionError(
+        "No routing target available. Remote server is unreachable and local Ollama is not running."
+    )

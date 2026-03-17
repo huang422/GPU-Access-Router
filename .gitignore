@@ -24,6 +24,7 @@ env/
 .coverage
 htmlcov/
 .tox/
+tests/
 
 # Type checking
 .mypy_cache/

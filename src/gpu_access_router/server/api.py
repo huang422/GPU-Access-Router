@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 try:
     from fastapi import FastAPI, HTTPException, Request
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import JSONResponse, Response, StreamingResponse
     import uvicorn
     from pydantic import BaseModel
 except ImportError as exc:
@@ -233,7 +233,7 @@ async def _proxy_inference(request: Request, ollama_path: str):
     try:
         payload = json.loads(body) if body else {}
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON body")
+        return _ollama_error_response(400, "Invalid JSON body")
 
     model = payload.get("model", "unknown")
     is_streaming = payload.get("stream", True)  # Ollama defaults to stream=true
@@ -242,9 +242,9 @@ async def _proxy_inference(request: Request, ollama_path: str):
     depth = await _serial_queue.get_depth()
     max_depth = _serial_queue.max_depth
     if max_depth > 0 and depth >= max_depth:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Queue full ({depth}/{max_depth}). Try again later.",
+        return _ollama_error_response(
+            503,
+            f"Queue full ({depth}/{max_depth}). Try again later.",
         )
 
     # Acquire exclusive GPU slot (waits if another request is in progress)
@@ -263,13 +263,13 @@ async def _proxy_inference(request: Request, ollama_path: str):
                 content=body,
                 headers={"Content-Type": "application/json"},
             )
-            return _make_json_response(resp)
+            return _make_passthrough_response(resp)
         except httpx.ConnectError:
-            raise HTTPException(status_code=503, detail="Ollama service unavailable")
+            return _ollama_error_response(503, "Ollama service unavailable")
         except httpx.TimeoutException:
-            raise HTTPException(status_code=408, detail="Ollama request timed out")
+            return _ollama_error_response(408, "Ollama request timed out")
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Proxy error: {exc}")
+            return _ollama_error_response(500, f"Proxy error: {exc}")
         finally:
             _serial_queue.release_slot(slot_id)
 
@@ -301,14 +301,20 @@ async def _stream_proxy(slot_id: str, ollama_path: str, body: bytes):
         _serial_queue.release_slot(slot_id)
 
 
-def _make_json_response(resp):
-    """Convert httpx response to a FastAPI-compatible dict response."""
+def _ollama_error_response(status_code: int, error: str) -> JSONResponse:
+    return JSONResponse(status_code=status_code, content={"error": error})
+
+
+def _make_passthrough_response(resp):
+    """Convert an upstream httpx response into a FastAPI response without losing status."""
     try:
-        return resp.json()
+        return JSONResponse(status_code=resp.status_code, content=resp.json())
     except Exception:
-        raise HTTPException(
+        media_type = resp.headers.get("content-type", "text/plain").split(";")[0]
+        return Response(
+            content=resp.content,
             status_code=resp.status_code,
-            detail=resp.text[:500] if resp.text else "Unknown Ollama error",
+            media_type=media_type,
         )
 
 
@@ -334,13 +340,13 @@ async def proxy_tags():
             with urllib.request.urlopen(url, timeout=5) as resp:
                 return json.loads(resp.read())
         except Exception as exc:
-            raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
+            return _ollama_error_response(503, f"Ollama unreachable: {exc}")
 
     try:
         resp = await _httpx_client.get("/api/tags")
-        return resp.json()
+        return _make_passthrough_response(resp)
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
+        return _ollama_error_response(503, f"Ollama unreachable: {exc}")
 
 
 # ---------------------------------------------------------------------------

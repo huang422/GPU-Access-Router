@@ -102,12 +102,12 @@ def generate(model: str, prompt: str, *, fallback_model: Optional[str] = None, *
     return _get_router().generate(model=model, prompt=prompt, fallback_model=fallback_model, **kwargs)
 
 
-def list(**kwargs: Any) -> Dict[str, Any]:
-    """List models available on the configured source(s).
+def list():
+    """List models from the routed source.
 
-    Returns the same structure as ``GPURouter.list_models()``.
+    Returns the native ``ollama.ListResponse`` type.
     """
-    return _get_router().list_models(**kwargs)
+    return _get_router().list()
 
 
 # ---------------------------------------------------------------------------
@@ -179,8 +179,8 @@ class Client:
             **kwargs,
         )
 
-    def list(self, **kwargs: Any) -> Dict[str, Any]:
-        return self._router.list_models(**kwargs)
+    def list(self):
+        return self._router.list(prefer=self._router.routing_mode)
 
 
 # ---------------------------------------------------------------------------
