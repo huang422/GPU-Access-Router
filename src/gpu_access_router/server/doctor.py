@@ -14,72 +14,47 @@ def _check(name: str, status: str, detail: str, fix_hint: str = "") -> Dict[str,
     return {"name": name, "status": status, "detail": detail, "fix_hint": fix_hint}
 
 
-def check_docker() -> Dict[str, str]:
+def check_ollama_running(port: int = DEFAULT_PORT) -> Dict[str, str]:
+    """Check if the native Ollama service is responding."""
+    try:
+        with urllib.request.urlopen(
+            f"http://localhost:{port}/", timeout=5
+        ) as resp:
+            body = resp.read().decode()
+            if "Ollama" in body:
+                return _check("ollama_running", "pass", f"Ollama is running on port {port}")
+        return _check("ollama_running", "pass", f"Service responding on port {port}")
+    except Exception as exc:
+        return _check(
+            "ollama_running", "fail",
+            f"Ollama not reachable on port {port}: {exc}",
+            "Start Ollama: ollama serve",
+        )
+
+
+def check_gpu() -> Dict[str, str]:
+    """Check if nvidia-smi is available on the host."""
     try:
         result = subprocess.run(
-            ["docker", "--version"], capture_output=True, text=True, timeout=10
+            ["nvidia-smi"], capture_output=True, text=True, timeout=15,
         )
         if result.returncode == 0:
-            version = result.stdout.strip()
-            return _check("docker_installed", "pass", version)
-        return _check(
-            "docker_installed", "fail",
-            "docker --version failed",
-            "Install Docker: https://docs.docker.com/engine/install/",
-        )
-    except FileNotFoundError:
-        return _check(
-            "docker_installed", "fail",
-            "Docker not found in PATH",
-            "Install Docker: https://docs.docker.com/engine/install/",
-        )
-    except Exception as exc:
-        return _check("docker_installed", "fail", str(exc), "Install Docker.")
-
-
-def check_ollama_container() -> Dict[str, str]:
-    try:
-        result = subprocess.run(
-            ["docker", "inspect", "--format={{.State.Running}}", "ollama"],
-            capture_output=True, text=True, timeout=10,
-        )
-        if result.returncode == 0 and result.stdout.strip() == "true":
-            return _check("ollama_container_running", "pass", "Container 'ollama' is running")
-        return _check(
-            "ollama_container_running", "fail",
-            "Container 'ollama' is not running",
-            "Run: docker start ollama",
-        )
-    except FileNotFoundError:
-        return _check("ollama_container_running", "fail", "Docker not available", "Install Docker.")
-    except Exception as exc:
-        return _check("ollama_container_running", "fail", str(exc), "Run: docker start ollama")
-
-
-def check_gpu_passthrough() -> Dict[str, str]:
-    try:
-        result = subprocess.run(
-            ["docker", "exec", "ollama", "nvidia-smi"],
-            capture_output=True, text=True, timeout=15,
-        )
-        if result.returncode == 0:
-            # Extract GPU name from nvidia-smi output
             lines = result.stdout.splitlines()
             gpu_name = "GPU detected"
             for line in lines:
                 if "GeForce" in line or "RTX" in line or "GTX" in line or "Tesla" in line or "A100" in line:
                     gpu_name = line.strip().split("|")[1].strip() if "|" in line else line.strip()
                     break
-            return _check("gpu_passthrough", "pass", gpu_name)
+            return _check("gpu", "pass", gpu_name)
         return _check(
-            "gpu_passthrough", "fail",
-            "nvidia-smi failed inside container",
-            "Install nvidia-container-toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html",
+            "gpu", "fail",
+            "nvidia-smi failed",
+            "Install NVIDIA drivers: https://docs.nvidia.com/datacenter/tesla/tesla-installation-notes/",
         )
     except FileNotFoundError:
-        return _check("gpu_passthrough", "fail", "Docker not available", "Install Docker.")
+        return _check("gpu", "fail", "nvidia-smi not found", "Install NVIDIA drivers.")
     except Exception as exc:
-        return _check("gpu_passthrough", "fail", str(exc), "Check nvidia-container-toolkit.")
+        return _check("gpu", "fail", str(exc), "Check NVIDIA drivers.")
 
 
 def check_tailscale() -> Dict[str, str]:
@@ -133,13 +108,13 @@ def check_ollama_models(port: int = DEFAULT_PORT) -> Dict[str, str]:
         return _check(
             "ollama_models_available", "fail",
             "No models pulled yet",
-            "Pull a model: docker exec ollama ollama pull llama3.2",
+            "Pull a model: ollama pull llama3.2",
         )
     except Exception as exc:
         return _check(
             "ollama_models_available", "fail",
             f"Could not reach Ollama: {exc}",
-            "Ensure container is running: gpu-access-router server start",
+            "Ensure Ollama is running: ollama serve",
         )
 
 
@@ -165,11 +140,10 @@ def check_queue_status(api_port: int = DEFAULT_API_PORT) -> Dict[str, str]:
 
 
 def run_doctor(ollama_port: int = DEFAULT_PORT, api_port: int = DEFAULT_API_PORT) -> Dict[str, Any]:
-    """Run all 6 diagnostic checks and return DiagnosticReport dict."""
+    """Run all diagnostic checks and return DiagnosticReport dict."""
     checks: List[Dict] = [
-        check_docker(),
-        check_ollama_container(),
-        check_gpu_passthrough(),
+        check_ollama_running(ollama_port),
+        check_gpu(),
         check_tailscale(),
         check_ollama_models(ollama_port),
         check_queue_status(api_port),

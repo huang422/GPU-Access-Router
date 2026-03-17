@@ -171,27 +171,14 @@ def _cmd_run_remote(model: str, prompt: str) -> int:
 
 def _cmd_ssh_only(subcmd: str, server_ip: str, extra_args: List[str]) -> int:
     """Commands that must run on the server — print SSH instructions."""
-    model_arg = extra_args[0] if extra_args else "<model>"
     extra = " ".join(extra_args)
-
-    DOCKER_CMDS = {
-        "pull": f"docker exec ollama ollama pull {model_arg}",
-        "rm":   f"docker exec ollama ollama rm {model_arg}",
-        "stop": f"docker exec ollama ollama stop {model_arg}",
-        "push": f"docker exec ollama ollama push {model_arg}",
-        "cp":   f"docker exec ollama ollama cp {extra}",
-        "create": f"docker exec ollama ollama create {extra}",
-        "serve":  "# (ollama serve is already running on the server)",
-    }
-    native_cmd = f"ollama {subcmd} {extra}".strip()
-    docker_cmd = DOCKER_CMDS.get(subcmd, native_cmd)
+    cmd = f"ollama {subcmd} {extra}".strip()
 
     print(f"[gpu-access-router] '{subcmd}' must run on the remote GPU server.")
     print("  SSH in and run:")
     print()
     print(f"    ssh <user>@{server_ip}")
-    print(f"    {native_cmd}      # native Ollama")
-    print(f"    {docker_cmd}      # Docker Ollama")
+    print(f"    {cmd}")
     return 0
 
 

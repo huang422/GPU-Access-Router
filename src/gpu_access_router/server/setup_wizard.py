@@ -36,25 +36,17 @@ def run_server_setup(
     non_interactive: bool = False,
     config_path: Optional[str] = None,
 ) -> None:
-    """Execute 10-step server setup wizard."""
-    total = 10
+    """Execute 8-step server setup wizard."""
+    total = 8
     console.print("\n[bold]GPU Access Router — Server Setup Wizard[/bold]\n")
 
-    # Step 1: Check Docker
-    _step(1, total, "Checking Docker installation…")
-    result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
-    if result.returncode != 0:
-        _fail("Docker not found.", "Install Docker: https://docs.docker.com/engine/install/")
-        sys.exit(1)
-    _ok(f"Docker found: {result.stdout.strip()}")
-
-    # Step 2: Detect NVIDIA drivers
-    _step(2, total, "Checking NVIDIA drivers…")
+    # Step 1: Detect NVIDIA drivers
+    _step(1, total, "Checking NVIDIA drivers…")
     result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
     if result.returncode != 0:
         _fail(
             "nvidia-smi not found or failed.",
-            "Install NVIDIA drivers and nvidia-container-toolkit.",
+            "Install NVIDIA drivers.",
         )
         if not non_interactive:
             if not _confirm("Continue anyway?"):
@@ -62,57 +54,23 @@ def run_server_setup(
     else:
         _ok("NVIDIA GPU detected.")
 
-    # Step 3 & 4: Check if Ollama is already reachable — skip Docker setup if so
-    _step(3, total, "Checking if Ollama is already running…")
-    if _wait_for_ollama(port, timeout=5):
-        _ok(f"Ollama already responding on port {port}, skipping Docker setup.")
-        _step(4, total, "Skipping container setup (Ollama already running).")
-        _ok("Nothing to do.")
-    else:
-        # Step 3: Pull ollama/ollama Docker image (skip if already present)
-        console.print("  Ollama not detected, setting up via Docker…")
-        image_check = subprocess.run(
-            ["docker", "image", "inspect", "ollama/ollama"],
-            capture_output=True,
-        )
-        if image_check.returncode == 0:
-            _ok("ollama/ollama image already present, skipping pull.")
-        else:
-            console.print("  Image not found locally, pulling (this may take a while)…")
-            result = subprocess.run(["docker", "pull", "ollama/ollama"], timeout=300)
-            if result.returncode != 0:
-                _fail("Failed to pull ollama/ollama image.", "Check your internet connection and Docker daemon.")
-                sys.exit(2)
-            _ok("ollama/ollama image pulled.")
+    # Step 2: Check if Ollama is installed
+    _step(2, total, "Checking Ollama installation…")
+    result = subprocess.run(["ollama", "--version"], capture_output=True, text=True)
+    if result.returncode != 0:
+        _fail("Ollama not found.", "Install Ollama: https://ollama.com/download")
+        sys.exit(1)
+    _ok(f"Ollama found: {result.stdout.strip()}")
 
-        # Step 4: Start Ollama container
-        _step(4, total, "Starting Ollama container with GPU access…")
-        subprocess.run(["docker", "rm", "-f", "ollama"], capture_output=True)
-        run_cmd = [
-            "docker", "run", "-d",
-            "--gpus", "all",
-            "--name", "ollama",
-            "-e", f"OLLAMA_HOST=0.0.0.0:{port}",
-            "-v", "ollama:/root/.ollama",
-            "-p", f"{port}:{port}",
-            "--restart", "unless-stopped",
-            "ollama/ollama",
-        ]
-        result = subprocess.run(run_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            _fail(f"Failed to start container: {result.stderr.strip()}", "Check Docker and GPU drivers.")
-            sys.exit(2)
-        _ok("Ollama container started.")
-
-    # Step 5: Confirm Ollama is ready
-    _step(5, total, "Waiting for Ollama to be ready (up to 60s)…")
+    # Step 3: Check if Ollama is running
+    _step(3, total, "Waiting for Ollama to be ready (up to 60s)…")
     if not _wait_for_ollama(port, timeout=60):
-        _fail("Ollama did not become ready in time.", "Check: docker logs ollama  OR  journalctl -u ollama")
+        _fail("Ollama did not become ready in time.", "Start Ollama: ollama serve")
         sys.exit(2)
     _ok("Ollama is ready.")
 
-    # Step 6: Check / install Tailscale
-    _step(6, total, "Checking Tailscale…")
+    # Step 4: Check / install Tailscale
+    _step(4, total, "Checking Tailscale…")
     result = subprocess.run(["tailscale", "--version"], capture_output=True, text=True)
     if result.returncode != 0:
         console.print("  Tailscale not found. Installing…")
@@ -125,8 +83,8 @@ def run_server_setup(
             sys.exit(2)
     _ok("Tailscale is installed.")
 
-    # Step 7: Prompt to run tailscale up
-    _step(7, total, "Tailscale authentication")
+    # Step 5: Prompt to run tailscale up
+    _step(5, total, "Tailscale authentication")
     console.print("  Run the following command in another terminal:")
     console.print("    [bold]sudo tailscale up[/bold]")
     if not non_interactive:
@@ -134,8 +92,8 @@ def run_server_setup(
     else:
         console.print("  [dim](non-interactive: skipping Tailscale auth prompt)[/dim]")
 
-    # Step 8: Get Tailscale IPv4
-    _step(8, total, "Reading Tailscale IP…")
+    # Step 6: Get Tailscale IPv4
+    _step(6, total, "Reading Tailscale IP…")
     tailscale_ip = _get_tailscale_ip()
     if tailscale_ip:
         _ok(f"Tailscale IP: [bold]{tailscale_ip}[/bold]")
@@ -143,8 +101,8 @@ def run_server_setup(
         _fail("Could not determine Tailscale IP.", "Run: tailscale ip -4")
         tailscale_ip = ""
 
-    # Step 9: Write config
-    _step(9, total, "Writing server configuration…")
+    # Step 7: Write config
+    _step(7, total, "Writing server configuration…")
     from gpu_access_router import config as cfg_mod
     cfg = cfg_mod.load_config(config_path)
     cfg.setdefault("server", {})
@@ -156,8 +114,8 @@ def run_server_setup(
     cfg_mod.save_config(cfg, config_path)
     _ok("Configuration saved.")
 
-    # Auto-start API server in background
-    _step(10, total, "Starting GPU Access Router API server in background…")
+    # Step 8: Auto-start API server in background
+    _step(8, total, "Starting GPU Access Router API server in background…")
     from gpu_access_router.cli import _start_api_server
     _start_api_server(api_port)
 

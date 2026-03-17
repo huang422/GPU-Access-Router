@@ -5,6 +5,7 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%20|%20Ubuntu-lightgrey)]()
 [![Ollama](https://img.shields.io/badge/ollama-compatible-orange)](https://ollama.com)
 [![Tailscale](https://img.shields.io/badge/network-Tailscale-blueviolet)](https://tailscale.com)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/huang422)
 
 ## What is GPU Access Router?
 
@@ -117,7 +118,7 @@ If `fallback_model` is configured, connection failures trigger an automatic retr
 
 | Role             | Machine                        | What it does                                                                                       |
 |------------------|--------------------------------|----------------------------------------------------------------------------------------------------|
-| **gpu-server**   | Ubuntu + NVIDIA GPU            | Runs Ollama (native or Docker), exposes a queue-based FastAPI server on port `8080` over Tailscale |
+| **gpu-server**   | Ubuntu + NVIDIA GPU            | Runs Ollama natively, exposes a queue-based FastAPI server on port `8080` over Tailscale |
 | **gpu-client**   | macOS / Ubuntu (no GPU needed) | Connects to the server, routes `GPURouter.chat()` calls automatically                              |
 
 | Port    | Service               | Scope                            |
@@ -555,8 +556,6 @@ gpu-access-router config set server.queue_timeout=600
 ```bash
 # Pull on the server (SSH in first):
 ollama pull qwen3.5:9b
-# Or via Docker:
-docker exec ollama ollama pull qwen3.5:9b
 ```
 
 ---
