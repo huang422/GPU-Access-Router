@@ -275,7 +275,32 @@ class GPURouter:
 
         effective_timeout = timeout or self.timeout
         effective_fallback = fallback_model or self.fallback_model
-        route = resolve_route(self._config, model, prefer=prefer or self.routing_mode)
+        prefer_mode = prefer or self.routing_mode
+        try:
+            route = resolve_route(self._config, model, prefer=prefer_mode)
+        except GPUAccessRouterConnectionError:
+            if prefer_mode == "remote" and effective_fallback:
+                self._warn_remote_fallback(model, effective_fallback)
+                if self._is_streaming_call(kwargs):
+                    return self._stream_client_method(
+                        lambda: self._get_local_client(effective_timeout),
+                        "chat",
+                        target=self._local_target(),
+                        timeout_seconds=effective_timeout,
+                        model=effective_fallback,
+                        messages=messages,
+                        **kwargs,
+                    )
+                return self._call_client_method(
+                    self._get_local_client(effective_timeout),
+                    "chat",
+                    target=self._local_target(),
+                    timeout_seconds=effective_timeout,
+                    model=effective_fallback,
+                    messages=messages,
+                    **kwargs,
+                )
+            raise
 
         if route == "remote":
             if self._is_streaming_call(kwargs):
@@ -410,7 +435,32 @@ class GPURouter:
 
         effective_timeout = timeout or self.timeout
         effective_fallback = fallback_model or self.fallback_model
-        route = resolve_route(self._config, model, prefer=prefer or self.routing_mode)
+        prefer_mode = prefer or self.routing_mode
+        try:
+            route = resolve_route(self._config, model, prefer=prefer_mode)
+        except GPUAccessRouterConnectionError:
+            if prefer_mode == "remote" and effective_fallback:
+                self._warn_remote_fallback(model, effective_fallback)
+                if self._is_streaming_call(kwargs):
+                    return self._stream_client_method(
+                        lambda: self._get_local_client(effective_timeout),
+                        "generate",
+                        target=self._local_target(),
+                        timeout_seconds=effective_timeout,
+                        model=effective_fallback,
+                        prompt=prompt,
+                        **kwargs,
+                    )
+                return self._call_client_method(
+                    self._get_local_client(effective_timeout),
+                    "generate",
+                    target=self._local_target(),
+                    timeout_seconds=effective_timeout,
+                    model=effective_fallback,
+                    prompt=prompt,
+                    **kwargs,
+                )
+            raise
 
         if route == "remote":
             if self._is_streaming_call(kwargs):

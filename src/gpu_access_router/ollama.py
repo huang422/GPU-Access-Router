@@ -287,10 +287,12 @@ class AsyncClient:
 
     async def list(self, **kwargs: Any):
         """List models from the routed source."""
-        try:
-            route = self._resolve_route("")
-        except GPUAccessRouterConnectionError:
-            route = "local"
+        from gpu_access_router.client.routing import resolve_list_route
+
+        route = resolve_list_route(
+            self._gpu_router._config,
+            prefer=self._gpu_router.routing_mode,
+        )
         client = self._get_remote_client() if route == "remote" else self._get_local_client()
         return await client.list(**kwargs)
 
@@ -302,7 +304,23 @@ class AsyncClient:
     async def _route_call(self, method: str, model: str, fallback_model: Optional[str], **kwargs: Any):
         """Core routing: try primary route, fallback on connection error."""
         effective_fallback = fallback_model or self._fallback_model
-        route = self._resolve_route(model)
+        try:
+            route = self._resolve_route(model)
+        except GPUAccessRouterConnectionError as exc:
+            if effective_fallback and self._gpu_router.routing_mode == "remote":
+                logger.warning(
+                    "Remote inference failed for '%s' during route resolution: %s. Falling back to local '%s'.",
+                    model, exc, effective_fallback,
+                )
+                warnings.warn(
+                    f"Remote inference failed for '{model}'. "
+                    f"Falling back to local model '{effective_fallback}'.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                client = self._get_local_client()
+                return await getattr(client, method)(model=effective_fallback, **kwargs)
+            raise
 
         if route == "remote":
             try:
