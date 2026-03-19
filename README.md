@@ -42,7 +42,7 @@ It solves a common problem: you have a powerful GPU machine at home or in the la
  │  Server         │        │  localhost:11434    │
  │  (Tailscale)    │        │                     │
  │                 │        │  fallback_model     │
- │  FastAPI :8080  │   ───► │  (if remote fails)  │
+ │  FastAPI :9090  │   ───► │  (if remote fails)  │
  │  Serial Queue   │        └─────────────────────┘
  │  + Ollama GPU   │
  └─────────────────┘
@@ -96,7 +96,7 @@ The `/api/*` endpoints act as a transparent Ollama-compatible proxy with queue p
 5. Each NDJSON chunk is forwarded to the client in real-time
 6. On stream completion (or error), `release_slot()` frees the semaphore
 
-This means any Ollama-compatible client can connect to the server and get queue-protected GPU access without code changes — just point it to `http://<server-ip>:8080` instead of `localhost:11434`.
+This means any Ollama-compatible client can connect to the server and get queue-protected GPU access without code changes — just point it to `http://<server-ip>:9090` instead of `localhost:11434`.
 
 </details>
 
@@ -118,13 +118,13 @@ If `fallback_model` is configured, connection failures trigger an automatic retr
 
 | Role             | Machine                        | What it does                                                                                       |
 |------------------|--------------------------------|----------------------------------------------------------------------------------------------------|
-| **gpu-server**   | Ubuntu + NVIDIA GPU            | Runs Ollama natively, exposes a queue-based FastAPI server on port `8080` over Tailscale |
+| **gpu-server**   | Ubuntu + NVIDIA GPU            | Runs Ollama natively, exposes a queue-based FastAPI server on port `9090` over Tailscale |
 | **gpu-client**   | macOS / Ubuntu (no GPU needed) | Connects to the server, routes `GPURouter.chat()` calls automatically                              |
 
 | Port    | Service               | Scope                            |
 |---------|-----------------------|----------------------------------|
 | `11434` | Ollama native API     | Server-internal only             |
-| `8080`  | GPU Access Router API | Exposed to clients via Tailscale |
+| `9090`  | GPU Access Router API | Exposed to clients via Tailscale |
 
 ---
 
@@ -181,9 +181,9 @@ gpu-access-router server serve
 pip install "gpu-access-router[client] @ git+https://github.com/huang422/GPU-Access-Router.git"
 pip install --force-reinstall "gpu-access-router[client] @ git+https://github.com/huang422/GPU-Access-Router.git"
 
-# Connect to your GPU server (use port 8080, not 11434)
+# Connect to your GPU server (use port 9090, not 11434)
 gpu-access-router client setup
-gpu-access-router client setup --server-ip 100.64.0.5 --port 8080
+gpu-access-router client setup --server-ip 100.64.0.5 --port 9090
 
 # Verify
 gpu-access-router client status
@@ -438,7 +438,7 @@ Config file: `~/.gpu-access-router/config.toml`
 ```toml
 [client]
 server_ip       = "100.64.0.5"    # Tailscale IP of GPU server
-server_port     = 8080            # GPU Access Router API port
+server_port     = 9090            # GPU Access Router API port
 routing_mode    = "auto"          # "auto" | "remote" | "local"
 timeout_seconds = 300             # Queue wait timeout
 default_model   = ""              # Optional default model
@@ -446,7 +446,7 @@ fallback_model  = "qwen3.5:9b"    # Local model to use when remote fails (option
 
 [server]
 ollama_port     = 11434           # Internal Ollama port
-api_port        = 8080            # FastAPI server port
+api_port        = 9090            # FastAPI server port
 queue_timeout   = 300             # Max queue wait time
 max_queue_depth = 10              # Max queued requests (0 = unlimited)
 
@@ -532,7 +532,7 @@ gpu-access-router server restart
 tailscale status                    # Check Tailscale on both machines
 gpu-access-router server doctor     # Run on server
 gpu-access-router client status     # Run on client
-curl http://<tailscale-ip>:8080/gd/health
+curl http://<tailscale-ip>:9090/gd/health
 ```
 
 ### ollama shim not working

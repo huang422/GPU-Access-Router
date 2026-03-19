@@ -14,6 +14,8 @@ import urllib.request
 from pathlib import Path
 from typing import List, Optional
 
+from gpu_access_router.core.constants import DEFAULT_API_PORT
+
 
 # ---------------------------------------------------------------------------
 # Remote detection
@@ -27,7 +29,7 @@ def _load_server_info():
         client = cfg.get("client", {})
         routing_mode = client.get("routing_mode", "auto")
         server_ip = client.get("server_ip", "")
-        server_port = int(client.get("server_port", 8080))
+        server_port = int(client.get("server_port", DEFAULT_API_PORT))
         if routing_mode == "local" or not server_ip:
             return None, None
         return server_ip, server_port
